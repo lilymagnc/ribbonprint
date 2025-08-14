@@ -1,103 +1,1840 @@
-import Image from "next/image";
+"use client";
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Download, Printer, Undo2, Redo2, Save, FolderOpen, HelpCircle, PlusCircle, ChevronLeft, ChevronRight, Settings } from "lucide-react";
+
+
+type Side = "left" | "right";
+
+interface FontFace {
+    family: string;
+    status: string;
+}
+
+function mmToPx(mm: number): number {
+	return Math.round(mm * 3.7795275591);
+}
+
+interface RibbonTextSettings {
+	label: string;
+	fontFamily: string;
+	fontSizePx: number;
+	isBold: boolean;
+	isItalic: boolean;
+	color: string;
+	content: string;
+	charSpacingMm: number;
+	topMarginMm: number;
+	bottomMarginMm: number;
+	autoFit: boolean;
+	sidePaddingMm: number;
+	// Font fallbacks per script (used as chained family list)
+	koreanFont?: string;
+	cjkFont?: string;
+	latinFont?: string;
+    verticalDirection?: "top-down" | "bottom-up";
+    horizontalAlign?: "left" | "center" | "right";
+    scaleX: number; // horizontal glyph scale multiplier (1 = 100%)
+    scaleY: number; // vertical glyph scale multiplier (pre-fill adjustment)
+    applyBracketScale?: boolean; // if true, content inside [ ] rendered smaller
+    bracketScale?: number; // 0~1, inner text scale
+    bracketSpacerFactor?: number; // 0~1, visual gap for '[' and ']' themselves
+}
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+	// Global ribbon sizing (shared)
+	const [ribbonWidthMm, setRibbonWidthMm] = useState<number>(38);
+	const [ribbonLengthMm, setRibbonLengthMm] = useState<number>(400);
+	const [backgroundColor, setBackgroundColor] = useState<string>("#ffffff");
+	const [scale, setScale] = useState<number>(0.6);
+	const [applyBoth, setApplyBoth] = useState<boolean>(true);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+    // UI string states for scale inputs to avoid flicker while typing
+    const [leftScaleXStr, setLeftScaleXStr] = useState<string>("100");
+    const [leftScaleYStr, setLeftScaleYStr] = useState<string>("100");
+    const [rightScaleXStr, setRightScaleXStr] = useState<string>("100");
+    const [rightScaleYStr, setRightScaleYStr] = useState<string>("100");
+
+	// Left/Right text settings
+	const [leftSettings, setLeftSettings] = useState<RibbonTextSettings>({
+		label: "경조사",
+		fontFamily: "Arial",
+		fontSizePx: 28,
+		isBold: false,
+		isItalic: false,
+		color: "#111111",
+		content: "경조사어 리본",
+		charSpacingMm: 5,
+		topMarginMm: 20,
+		bottomMarginMm: 20,
+		autoFit: true,
+		sidePaddingMm: 2,
+		koreanFont: "Noto Sans KR",
+		cjkFont: "Malgun Gothic",
+		latinFont: "Arial",
+        verticalDirection: "top-down",
+        horizontalAlign: "center",
+        scaleX: 1,
+        scaleY: 1,
+        applyBracketScale: false,
+        bracketScale: 0.5,
+        bracketSpacerFactor: 0.5,
+	});
+	const [rightSettings, setRightSettings] = useState<RibbonTextSettings>({
+		label: "보내는이",
+		fontFamily: "Arial",
+		fontSizePx: 28,
+		isBold: false,
+		isItalic: false,
+		color: "#111111",
+		content: "보내는이 리본",
+		charSpacingMm: 5,
+		topMarginMm: 20,
+		bottomMarginMm: 20,
+		autoFit: true,
+		sidePaddingMm: 2,
+		koreanFont: "Noto Sans KR",
+		cjkFont: "Malgun Gothic",
+		latinFont: "Arial",
+        verticalDirection: "top-down",
+        horizontalAlign: "center",
+        scaleX: 1,
+        scaleY: 1,
+		applyBracketScale: true,
+        bracketScale: 0.5,
+        bracketSpacerFactor: 0.5,
+	});
+
+	// Derived pixels
+	const ribbonWidthPx = useMemo(() => mmToPx(ribbonWidthMm), [ribbonWidthMm]);
+    const ribbonLengthPx = useMemo(() => mmToPx(ribbonLengthMm), [ribbonLengthMm]);
+    const totalCanvasWidthPx = useMemo(() => 34 + ribbonWidthPx + 34, [ribbonWidthPx]); // rulerPx * 2 + ribbonWidthPx
+    const gapPx = 40; // Tailwind gap-10 ≈ 40px
+    const contentWidthPx = useMemo(() => totalCanvasWidthPx * 2 + gapPx, [totalCanvasWidthPx]);
+    const previewContainerRef = useRef<HTMLDivElement | null>(null);
+    const [containerWidth, setContainerWidth] = useState<number>(0);
+
+    const [fitBoth, setFitBoth] = useState<boolean>(true);
+    useEffect(() => {
+        const el = previewContainerRef.current;
+        if (!el) return;
+        const ro = new ResizeObserver(entries => {
+            for (const e of entries) {
+                const cr = e.contentRect;
+                setContainerWidth(Math.max(0, cr.width - 16));
+            }
+        });
+        ro.observe(el);
+        return () => ro.disconnect();
+    }, []);
+
+    // Observe left settings panel height to sync preview height
+    useEffect(() => {
+        const el = leftPanelRef.current;
+        if (!el) return;
+        const ro = new ResizeObserver(entries => {
+            for (const e of entries) {
+                const cr = e.contentRect;
+                setLeftPanelHeight(Math.round(cr.height));
+            }
+        });
+        ro.observe(el);
+        // initial read
+        setLeftPanelHeight(Math.round(el.getBoundingClientRect().height));
+        return () => ro.disconnect();
+    }, []);
+    const computedFitScale = useMemo(() => {
+        if (containerWidth <= 0) return scale;
+        const sW = containerWidth / Math.max(1, contentWidthPx);
+        // 폭 기준으로만 자동 맞춤. 세로는 스크롤 허용
+        return Math.min(1, Math.max(0.1, sW));
+    }, [containerWidth, contentWidthPx, scale]);
+    const effectiveScale = fitBoth ? computedFitScale : scale;
+	const rulerPx = 34; // ruler width on each side (slightly wider for readability)
+	const rulerLabelFontPx = 14;
+	const [showRuler, setShowRuler] = useState<boolean>(true);
+    const [showGuides, setShowGuides] = useState<boolean>(true);
+	const [guide1Mm, setGuide1Mm] = useState<number>(80);
+	const [guide2Mm, setGuide2Mm] = useState<number>(50);
+	// print calibration
+	const [printScalePercent, setPrintScalePercent] = useState<number>(100);
+	const [printOffsetXmm, setPrintOffsetXmm] = useState<number>(0);
+	const [printOffsetYmm, setPrintOffsetYmm] = useState<number>(0);
+	const [applyCalibrationToDownload, setApplyCalibrationToDownload] = useState<boolean>(false);
+
+    // environment settings
+	const [envOpen, setEnvOpen] = useState<boolean>(false);
+    const [envDefaultPreset, setEnvDefaultPreset] = useState<string>("bouquet-38x400");
+    // font environment
+    const [envFontSource, setEnvFontSource] = useState<"system" | "web">("system");
+    const [envSystemFont, setEnvSystemFont] = useState<string>("Noto Sans KR");
+    const [envWebFontUrl, setEnvWebFontUrl] = useState<string>("");
+    const [envWebFontFamily, setEnvWebFontFamily] = useState<string>("");
+    type WebFontItem = { id: string; url: string; family: string };
+    const [envWebFonts, setEnvWebFonts] = useState<WebFontItem[]>([]);
+    // Custom raw CSS (@font-face) entries
+    type WebFontCssItem = { id: string; css: string; families: string[] };
+    const [envWebFontCss, setEnvWebFontCss] = useState<string>("");
+    const [envWebFontCssList, setEnvWebFontCssList] = useState<WebFontCssItem[]>([]);
+    const [fontLoadTick, setFontLoadTick] = useState<number>(0);
+	const [envPrintScale, setEnvPrintScale] = useState<number>(100);
+	const [envOffsetXmm, setEnvOffsetXmm] = useState<number>(0);
+	const [envOffsetYmm, setEnvOffsetYmm] = useState<number>(0);
+    // global base font
+    const koreanFontOptions = [
+        { key: 'Noto Sans KR', label: 'Noto Sans KR' },
+        { key: 'Nanum Gothic', label: '나눔고딕 (Nanum Gothic)' },
+        { key: 'Nanum Myeongjo', label: '나눔명조 (Nanum Myeongjo)' },
+        { key: 'Gowun Dodum', label: '고운돋움 (Gowun Dodum)' },
+        { key: 'Do Hyeon', label: '도현 (Do Hyeon)' },
+    ];
+    const windowsFontOptions = [
+        { key: 'Malgun Gothic', label: '맑은 고딕 (Malgun Gothic)' },
+        { key: 'Gulim', label: '굴림 (Gulim)' },
+        { key: 'Dotum', label: '돋움 (Dotum)' },
+        { key: 'Batang', label: '바탕 (Batang)' },
+    ];
+    const latinFontOptions = [
+        { key: 'Arial', label: 'Arial' },
+        { key: 'Times New Roman', label: 'Times New Roman' },
+        { key: 'Courier New', label: 'Courier New' },
+        { key: 'Georgia', label: 'Georgia' },
+        { key: 'Verdana', label: 'Verdana' },
+        { key: 'Tahoma', label: 'Tahoma' },
+        { key: 'Trebuchet MS', label: 'Trebuchet MS' },
+        { key: 'Inter', label: 'Inter' },
+        { key: 'Roboto', label: 'Roboto' },
+        { key: 'Noto Sans', label: 'Noto Sans' },
+    ];
+    // Experimental: Local Font Access (Chromium) — enumerate installed system fonts with permission
+    const [systemFontList, setSystemFontList] = useState<string[]>([]);
+    const [loadingSystemFonts, setLoadingSystemFonts] = useState<boolean>(false);
+    const [systemFontError, setSystemFontError] = useState<string>("");
+    const loadSystemFonts = async () => {
+        setSystemFontError("");
+        try {
+            const navAny = navigator as { fonts?: { query?: () => Promise<{ family?: string; fullName?: string }[]> } };
+            if (!navAny.fonts || !navAny.fonts.query) {
+                setSystemFontError("브라우저가 시스템 폰트 열람을 지원하지 않습니다(Chrome 기반 권장).");
+                return;
+            }
+            setLoadingSystemFonts(true);
+            const fonts = await navAny.fonts.query();
+            const names = new Set<string>();
+            // FontData has properties: postscriptName, fullName, family, style
+            for await (const f of fonts) {
+                if (f.fullName) names.add(String(f.fullName));
+                else if (f.family) names.add(String(f.family));
+            }
+            const arr = Array.from(names).sort((a,b)=>a.localeCompare(b));
+            setSystemFontList(arr);
+        } catch {
+            setSystemFontError("시스템 폰트 접근이 거부되었거나 실패했습니다.");
+        } finally {
+            setLoadingSystemFonts(false);
+        }
+    };
+    const [baseFontFamily, setBaseFontFamily] = useState<string>(koreanFontOptions[0].key);
+    const [baseFontSizePx, setBaseFontSizePx] = useState<number>(32);
+    // Global per-script font selection
+    const [fontKorean, setFontKorean] = useState<string>("Noto Sans KR");
+    const [fontCjk, setFontCjk] = useState<string>("Malgun Gothic");
+    const [fontLatin, setFontLatin] = useState<string>("Arial");
+
+    const leftCanvasRef = useRef<HTMLCanvasElement | null>(null);
+    const rightCanvasRef = useRef<HTMLCanvasElement | null>(null);
+    const fileInputRef = useRef<HTMLInputElement | null>(null);
+    const leftPanelRef = useRef<HTMLDivElement | null>(null);
+    const [leftPanelHeight, setLeftPanelHeight] = useState<number>(0);
+
+    // Presets (editable list)
+    type RibbonPreset = {
+        key: string;
+        label: string; // 리본이름
+        width: number; // 넓이(mm)
+        length: number; // 길이(mm)
+        laceMm: number; // 레이스(양옆 여백)
+        topMm: number; // 상단(mm)
+        bottomMm: number; // 하단(mm)
+        bracketPercent: number; // 축소비율(%)
+        scaleXPercent: number; // 가로비율(%)
+        scaleYPercent: number; // 세로비율(%)
+        marginMm: number; // 여백(mm) - 참고용
+        startXmm: number; // 가로시작(mm)
+        startYmm: number; // 세로시작(mm)
+    };
+    const defaultPresets: RibbonPreset[] = [
+        { key: "bouquet-38x400", label: "꽃다발 38x400mm", width: 38, laceMm: 5, length: 400, topMm: 80, bottomMm: 50, bracketPercent: 70, scaleXPercent: 100, scaleYPercent: 100, marginMm: 53, startXmm: 0, startYmm: 0 },
+        { key: "dongyang-45x450", label: "동양란 45x450mm", width: 45, laceMm: 7, length: 450, topMm: 100, bottomMm: 50, bracketPercent: 70, scaleXPercent: 100, scaleYPercent: 100, marginMm: 57, startXmm: 0, startYmm: 0 },
+        { key: "dongyang-50x500", label: "동양란 50x500mm", width: 50, laceMm: 8, length: 500, topMm: 120, bottomMm: 50, bracketPercent: 70, scaleXPercent: 100, scaleYPercent: 100, marginMm: 62, startXmm: 0, startYmm: 0 },
+        { key: "eastwest-55x500", label: "동/서양란 55x500mm", width: 55, laceMm: 10, length: 500, topMm: 120, bottomMm: 80, bracketPercent: 70, scaleXPercent: 100, scaleYPercent: 100, marginMm: 65, startXmm: 0, startYmm: 0 },
+        { key: "seoyang-60x600", label: "서양란 60x600mm", width: 60, laceMm: 10, length: 600, topMm: 150, bottomMm: 80, bracketPercent: 70, scaleXPercent: 100, scaleYPercent: 100, marginMm: 70, startXmm: 0, startYmm: 0 },
+        { key: "yeonghwa-70x750", label: "영화(죽) 70x750mm", width: 70, laceMm: 10, length: 750, topMm: 150, bottomMm: 100, bracketPercent: 70, scaleXPercent: 100, scaleYPercent: 100, marginMm: 70, startXmm: 0, startYmm: 0 },
+        { key: "janghak-95x1000", label: "장학나무 95x1000mm", width: 95, laceMm: 10, length: 1000, topMm: 150, bottomMm: 100, bracketPercent: 70, scaleXPercent: 100, scaleYPercent: 100, marginMm: 80, startXmm: 0, startYmm: 0 },
+        { key: "flower-large-105x1100", label: "화분 大 105/110x1100mm", width: 105, laceMm: 23, length: 1100, topMm: 150, bottomMm: 100, bracketPercent: 70, scaleXPercent: 100, scaleYPercent: 100, marginMm: 87, startXmm: 0, startYmm: 0 },
+        { key: "flower-mid-85x1000", label: "화분 中 85x1000mm", width: 85, laceMm: 23, length: 1000, topMm: 150, bottomMm: 100, bracketPercent: 70, scaleXPercent: 100, scaleYPercent: 100, marginMm: 102, startXmm: 0, startYmm: 0 },
+        { key: "flower-small-70x900", label: "화분 小 70x900mm", width: 70, laceMm: 23, length: 900, topMm: 150, bottomMm: 100, bracketPercent: 70, scaleXPercent: 100, scaleYPercent: 100, marginMm: 110, startXmm: 0, startYmm: 0 },
+        { key: "funeral-large-150x1800", label: "근조 大 150x1800mm", width: 150, laceMm: 23, length: 1800, topMm: 150, bottomMm: 350, bracketPercent: 70, scaleXPercent: 100, scaleYPercent: 100, marginMm: 92, startXmm: 0, startYmm: 0 },
+        { key: "funeral-2-115x1200", label: "근조 2단 115x1200mm", width: 115, laceMm: 23, length: 1200, topMm: 250, bottomMm: 150, bracketPercent: 70, scaleXPercent: 100, scaleYPercent: 100, marginMm: 112, startXmm: 0, startYmm: 0 },
+        { key: "funeral-2-135x1700", label: "근조 2단 135x1700mm", width: 135, laceMm: 23, length: 1700, topMm: 350, bottomMm: 150, bracketPercent: 70, scaleXPercent: 100, scaleYPercent: 100, marginMm: 112, startXmm: 0, startYmm: 0 },
+        { key: "funeral-3-165x2200", label: "근조 3단 165x2200mm", width: 165, laceMm: 23, length: 2200, topMm: 400, bottomMm: 300, bracketPercent: 70, scaleXPercent: 100, scaleYPercent: 100, marginMm: 117, startXmm: 0, startYmm: 0 },
+        { key: "chukhwa-3-165x2200", label: "축화 3단 165x2200mm", width: 165, laceMm: 23, length: 2200, topMm: 400, bottomMm: 300, bracketPercent: 70, scaleXPercent: 100, scaleYPercent: 100, marginMm: 117, startXmm: 0, startYmm: 0 },
+    ];
+    const [presets, setPresets] = useState<RibbonPreset[]>(defaultPresets);
+    const [selectedPreset, setSelectedPreset] = useState<string>(defaultPresets[0].key);
+    const [presetOpen, setPresetOpen] = useState<boolean>(false);
+    const getPresetDisplayLabel = (p: RibbonPreset) => (p.label && p.label.trim().length > 0) ? p.label : `${p.width}x${p.length}mm`;
+
+
+    // Celebration samples (경조사) — categories and items
+    type SampleItem = { label: string; value: string };
+    type SampleCategory = { key: string; name: string; items: SampleItem[] };
+    const [samples, setSamples] = useState<SampleCategory[]>([]);
+    const [leftSampleCat, setLeftSampleCat] = useState<string>("");
+    // Sender samples (for right ribbon)
+    const [senderSamples, setSenderSamples] = useState<SampleCategory[]>([]);
+    const [rightSenderCat, setRightSenderCat] = useState<string>("");
+
+
+    const RAW_SAMPLES = `==========  생일, 회갑, 칠순, 팔순, 구순  
+祝生日=축생일
+祝生辰=축생신
+祝華甲=축화갑(60세)
+祝壽宴=축수연(60세)
+祝回甲=축회갑(60세)
+祝古稀=축고희(70세)
+祝七旬=축칠순(70세)
+祝喜壽=축희수(77세)
+祝八旬=축팔순(80세)
+祝傘壽=축산수(80세)
+祝米壽=축미수(88세)
+祝白壽=축백수(99세)
+Happy Birthday!=생일을 축하합니다
+==========  승진. 취임. 영전  
+祝昇進=축승진
+祝榮轉=축영전
+祝就任=축위임
+祝轉任=축전임
+祝移任=축이임
+祝遷任=축천임
+祝轉役=축전역
+祝榮進=축영진
+祝選任=축선임
+祝重任=축중임
+祝連任=축연임
+祝就任=축취임
+Congratulations on your promotion=승진을 축하합니다
+==========  개업, 창립  
+祝發展=축발전
+祝開業=축개업
+祝盛業=축성업
+祝繁榮=축번영
+祝創立=축창립
+祝設立=축설립
+祝創設=축창설
+祝創刊=축창간
+祝移轉=축이전
+祝開院=축개원
+祝開館=축개관
+祝開場=축개장
+祝開店=축개점
+祝創立紀念紀念=축창립기념기념
+祝創立00周年=축창립00주년
+Congratulations on your new business=개업을 축하합니다
+==========  약혼, 결혼, 결혼기념일  
+祝約婚=축약혼
+祝結婚=축결혼 (男)
+祝華婚=축화혼 (女)
+祝成婚=축성혼
+紙婚式=지혼식 1주년 결혼기념식
+常婚式=상혼식 2주년 결혼기념식
+菓婚式=과혼식 3주년 결혼기념식
+革婚式=혁혼식 4주년 결혼기념식
+木婚式=목혼식 5주년 결혼기념식
+花婚式=화혼식 7주년 결혼기념식
+祝錫婚式=축석혼식 10주년 결혼기념식
+痲婚式=마혼식 12주년 결혼기념식
+祝銅婚式=축동혼식 15주년 결혼기념식
+祝陶婚式=축도혼식 20주년 결혼기념식
+祝銀婚式=축은혼식 25주년 결혼기념식
+祝眞珠婚式=축진주혼식 30주년 결혼기념식
+祝珊瑚婚式=축산호혼식 35주년 결혼기념식
+祝錄玉婚式=축녹옥혼식 40주년 결혼기념식
+祝紅玉婚式=축홍옥혼식 45주년 결혼기념식
+祝金婚式=축금혼식 50주년 결혼기념식
+祝金剛婚式=축금강혼식 60주년 결혼기념식
+A Happy Marriage=행복한 결혼되세요
+Congratulations on your 10th anniversary=결혼 10주년을 축하합니다
+==========   죽음애도   
+謹弔=근조
+追慕=추모
+追悼=추도
+哀悼=애도
+弔意=조의
+尉靈=위령
+謹悼=근도
+賻儀=부의
+冥福=명복
+故人의 冥福을 빕니다
+삼가 故人의 冥福을 빕니다
+You have my condolences=삼가 고인의 명복을 빕니다
+Please accept my deepest condolences=깊은 애도를 표합니다
+==========  출산, 순산  
+祝順産=축순산
+祝出産=축출산
+祝誕生=축탄생
+祝得男=축득남
+祝得女=축득녀
+祝公主誕生=축공주탄생
+祝王子誕生=축왕자탄생
+Congratulations on your new baby=출산을 축하합니다
+`;
+
+    const hasHanja = (s: string) => /[\u4E00-\u9FFF]/.test(s);
+    const preferHanjaFromLabel = (label: string, fallback: string) => {
+        const parts = label.split('/').map(p => p.trim());
+        if (parts.length >= 2) {
+            const a = parts[0];
+            const b = parts[1];
+            if (hasHanja(a) && !hasHanja(b)) return a;
+            if (hasHanja(b) && !hasHanja(a)) return b;
+            return a; // default left
+        }
+        return fallback;
+    };
+
+    const parseSamples = (raw: string): SampleCategory[] => {
+        const lines = raw.split(/\r?\n/);
+        const result: SampleCategory[] = [];
+        let current: SampleCategory | null = null;
+        for (const line0 of lines) {
+            const line = line0.trim();
+            if (!line) continue;
+            if (line.startsWith("==========")) {
+                const name = line.replace(/=+/g, "").trim();
+                const key = `cat_${result.length}`;
+                current = { key, name, items: [] };
+                result.push(current);
+                continue;
+            }
+            if (!current) continue;
+            const eqIdx = line.indexOf('=');
+            if (eqIdx > -1) {
+                const left = line.slice(0, eqIdx).trim();
+                const right = line.slice(eqIdx + 1).trim();
+                let preferred = left;
+                if (hasHanja(right) && !hasHanja(left)) preferred = right;
+                current.items.push({ label: `${left} / ${right}`.trim(), value: preferred });
+            } else {
+                current.items.push({ label: line, value: line });
+            }
+        }
+        return result;
+    };
+
+    // load presets from localStorage with migration/merge to full defaults
+    useEffect(() => {
+        try {
+            const raw = localStorage.getItem('ribbonPresetListV1');
+            if (raw) {
+                const list0 = JSON.parse(raw) as RibbonPreset[];
+                const list = Array.isArray(list0) ? list0 : [];
+                // normalize stored
+                const normalizedStored = (list.length > 0 ? list : []).map((p, i) => ({
+                    key: p.key || `custom-${Date.now()}-${i}`,
+                    label: String(p.label || '').trim() || `${p.width}x${p.length}mm`,
+                    width: Number(p.width) || 38,
+                    length: Number(p.length) || 400,
+                    laceMm: Number(p.laceMm) || 0,
+                    topMm: Number(p.topMm) || 0,
+                    bottomMm: Number(p.bottomMm) || 0,
+                    bracketPercent: Number(p.bracketPercent) || 70,
+                    scaleXPercent: Number(p.scaleXPercent) || 100,
+                    scaleYPercent: Number(p.scaleYPercent) || 100,
+                    marginMm: Number(p.marginMm) || 0,
+                    startXmm: Number(p.startXmm) || 0,
+                    startYmm: Number(p.startYmm) || 0,
+                }));
+                // merge defaults that are missing
+                const keyOf = (p: RibbonPreset) => `${p.label}|${p.width}x${p.length}`;
+                const map = new Map<string, RibbonPreset>();
+                for (const p of normalizedStored) map.set(keyOf(p), p);
+                for (const d of defaultPresets) {
+                    const kd = keyOf(d);
+                    if (!map.has(kd)) map.set(kd, d);
+                }
+                const merged = Array.from(map.values());
+                // sort by width then length then label
+                merged.sort((a,b)=> a.width-b.width || a.length-b.length || a.label.localeCompare(b.label));
+                setPresets(merged);
+                const firstKey = (merged[0]?.key) || defaultPresets[0].key;
+                setSelectedPreset(firstKey);
+                applyPreset(firstKey);
+                // persist merged if different size
+                if (merged.length !== list.length) localStorage.setItem('ribbonPresetListV1', JSON.stringify(merged));
+            } else {
+                localStorage.setItem('ribbonPresetListV1', JSON.stringify(defaultPresets));
+                setPresets(defaultPresets);
+                setSelectedPreset(defaultPresets[0].key);
+                applyPreset(defaultPresets[0].key);
+            }
+        } catch {
+            // fallback to defaults on any error
+            setPresets(defaultPresets);
+            setSelectedPreset(defaultPresets[0].key);
+            applyPreset(defaultPresets[0].key);
+            try { localStorage.setItem('ribbonPresetListV1', JSON.stringify(defaultPresets)); } catch {}
+        }
+    }, []);
+
+    const savePresets = (list: RibbonPreset[]) => {
+        const normalized = list.map((p, i) => ({
+            ...p,
+            key: p.key || `custom-${Date.now()}-${i}`,
+            label: String(p.label || '').trim() || `${p.width}x${p.length}mm`,
+        }));
+        setPresets(normalized);
+        localStorage.setItem('ribbonPresetListV1', JSON.stringify(normalized));
+    };
+
+    // load samples
+    useEffect(() => {
+        try {
+            const raw = localStorage.getItem('ribbonSamplesV1');
+            if (raw) {
+                const parsed = JSON.parse(raw) as SampleCategory[];
+                // upgrade: recompute preferred values by hanja priority from label when possible
+                const upgraded = parsed.map(cat => ({
+                    ...cat,
+                    items: cat.items.map(it => {
+                        const preferred = preferHanjaFromLabel(it.label, it.value);
+                        return { ...it, value: preferred };
+                    })
+                }));
+                setSamples(upgraded);
+                localStorage.setItem('ribbonSamplesV1', JSON.stringify(upgraded));
+                if (upgraded[0]) {
+                    setLeftSampleCat(upgraded[0].key);
+                }
+            } else {
+                const parsed = parseSamples(RAW_SAMPLES);
+                setSamples(parsed);
+                localStorage.setItem('ribbonSamplesV1', JSON.stringify(parsed));
+                if (parsed[0]) {
+                    setLeftSampleCat(parsed[0].key);
+                }
+            }
+        } catch {}
+    }, []);
+
+    // load sender samples (right)
+    const RAW_SENDER_SAMPLES = `==========  보내는이 선택
+(주)삼성전자[대표이사/홍길동]임원일동
+LG전자[이사]홍길동
+삼성SDS[과장]홍길동
+현대자동차[부장]이순신
+GM[이사]홍길동
+현대건설[사장]홍길동`;
+
+    useEffect(() => {
+        try {
+            const raw = localStorage.getItem('ribbonSenderSamplesV1');
+            if (raw) {
+                const parsed = JSON.parse(raw) as SampleCategory[];
+                setSenderSamples(parsed);
+                if (parsed[0]) setRightSenderCat(parsed[0].key);
+            } else {
+                const parsed = parseSamples(RAW_SENDER_SAMPLES);
+                setSenderSamples(parsed);
+                localStorage.setItem('ribbonSenderSamplesV1', JSON.stringify(parsed));
+                if (parsed[0]) setRightSenderCat(parsed[0].key);
+            }
+        } catch {}
+    }, []);
+
+
+
+	const drawRibbon = (canvas: HTMLCanvasElement | null, settings: RibbonTextSettings) => {
+		if (!canvas) return;
+		const totalWidth = rulerPx + ribbonWidthPx + rulerPx;
+		canvas.width = totalWidth;
+		canvas.height = ribbonLengthPx;
+		const ctx = canvas.getContext("2d");
+		if (!ctx) return;
+
+		// background gray
+		ctx.fillStyle = "#e5e7eb"; // gray-200
+		ctx.fillRect(0, 0, totalWidth, ribbonLengthPx);
+
+		// rulers
+		const drawRuler = (xStart: number) => {
+            ctx.fillStyle = "#22c55e"; // green-500
+            ctx.fillRect(xStart, 0, rulerPx, ribbonLengthPx);
+            ctx.strokeStyle = "#0f766e"; // darker lines
+            ctx.lineWidth = 1.25;
+            ctx.font = `600 ${rulerLabelFontPx}px Arial`;
+            for (let mm = 0; mm <= ribbonLengthMm; mm += 10) {
+                const y = Math.round(mmToPx(mm));
+                ctx.beginPath();
+                ctx.moveTo(xStart, y);
+                const tick = mm % 50 === 0 ? 14 : mm % 10 === 0 ? 9 : 5;
+                ctx.lineTo(xStart + tick, y);
+                ctx.stroke();
+                if (mm % 50 === 0 && mm !== 0) {
+                    // outline then fill to improve contrast over green
+                    ctx.save();
+                    ctx.lineWidth = 3;
+                    ctx.strokeStyle = "#ffffff";
+                    ctx.strokeText(`${mm}mm`, xStart + 14, y - rulerLabelFontPx / 3);
+                    ctx.fillStyle = "#111111";
+                    ctx.fillText(`${mm}mm`, xStart + 14, y - rulerLabelFontPx / 3);
+                    ctx.restore();
+                }
+            }
+        };
+		if (showRuler) {
+			drawRuler(0);
+			drawRuler(rulerPx + ribbonWidthPx);
+		}
+
+		// ribbon center area
+		const ribbonX = rulerPx;
+		ctx.fillStyle = backgroundColor;
+		ctx.fillRect(ribbonX, 0, ribbonWidthPx, ribbonLengthPx);
+
+		// center guide lines
+		ctx.strokeStyle = "#60a5fa"; // blue-400
+		ctx.setLineDash([4, 4]);
+		ctx.beginPath();
+		ctx.moveTo(ribbonX + ribbonWidthPx / 2, 0);
+		ctx.lineTo(ribbonX + ribbonWidthPx / 2, ribbonLengthPx);
+		ctx.stroke();
+		ctx.setLineDash([]);
+
+		// reference dimension lines (customizable)
+		if (showGuides) {
+			ctx.save();
+			ctx.strokeStyle = "#111827";
+			ctx.lineWidth = 1.5;
+			ctx.setLineDash([3, 6]);
+			const y1 = mmToPx(guide1Mm);
+			ctx.beginPath();
+			ctx.moveTo(ribbonX, y1);
+			ctx.lineTo(ribbonX + ribbonWidthPx, y1);
+			ctx.stroke();
+			ctx.setLineDash([]);
+			ctx.font = "700 14px Arial";
+			ctx.fillStyle = "#111827";
+			ctx.textAlign = "right";
+			ctx.textBaseline = "middle";
+			ctx.fillText(`${guide1Mm}mm`, ribbonX + ribbonWidthPx - 4, y1);
+			const y2b = ribbonLengthPx - mmToPx(guide2Mm);
+			ctx.setLineDash([3, 6]);
+			ctx.beginPath();
+			ctx.moveTo(ribbonX, y2b);
+			ctx.lineTo(ribbonX + ribbonWidthPx, y2b);
+			ctx.stroke();
+			ctx.setLineDash([]);
+			ctx.fillText(`${guide2Mm}mm`, ribbonX + ribbonWidthPx - 4, y2b);
+			ctx.restore();
+		}
+
+		// vertical text with auto-fit to ribbon width
+		const fontWeight = settings.isBold ? "700" : "400";
+		const fontStyle = settings.isItalic ? "italic" : "normal";
+		ctx.fillStyle = settings.color;
+
+		const sidePaddingPx = Math.max(0, mmToPx(settings.sidePaddingMm));
+		const targetInnerWidth = Math.max(1, ribbonWidthPx - sidePaddingPx * 2);
+
+		// Visualize side padding (레이스) areas on both edges
+		if (sidePaddingPx > 0) {
+			ctx.save();
+			ctx.fillStyle = "rgba(148,163,184,0.18)"; // slate-400 at low opacity
+			// left lace
+			ctx.fillRect(ribbonX, 0, sidePaddingPx, ribbonLengthPx);
+			// right lace
+			ctx.fillRect(ribbonX + ribbonWidthPx - sidePaddingPx, 0, sidePaddingPx, ribbonLengthPx);
+			// inner guide lines for lace boundary
+			ctx.strokeStyle = "#94a3b8"; // slate-400
+			ctx.setLineDash([4,3]);
+			ctx.beginPath();
+			ctx.moveTo(ribbonX + sidePaddingPx, 0);
+			ctx.lineTo(ribbonX + sidePaddingPx, ribbonLengthPx);
+			ctx.moveTo(ribbonX + ribbonWidthPx - sidePaddingPx, 0);
+			ctx.lineTo(ribbonX + ribbonWidthPx - sidePaddingPx, ribbonLengthPx);
+			ctx.stroke();
+			ctx.setLineDash([]);
+			ctx.restore();
+		}
+
+		// per-script font helpers
+		const isHangulChar = (ch: string) => /[\u1100-\u11FF\uAC00-\uD7AF]/.test(ch);
+		const isHanjaChar = (ch: string) => /[\u4E00-\u9FFF]/.test(ch);
+		const isLatinChar = (ch: string) => /[A-Za-z0-9]/.test(ch);
+		const fontChainForChar = (ch: string) => {
+			if (isHangulChar(ch)) return `"${fontKorean}", "${baseFontFamily}", sans-serif`;
+			if (isHanjaChar(ch)) return `"${fontCjk}", "${baseFontFamily}", sans-serif`;
+			if (isLatinChar(ch)) return `"${fontLatin}", "${baseFontFamily}", sans-serif`;
+			return `"${baseFontFamily}", sans-serif`;
+		};
+
+		// measure widest unit at current font size (treat (X) as one unit)
+		const baseFontSize = baseFontSizePx;
+        const measureUnits: string[] = [];
+        {
+            const s = settings.content;
+            let i = 0;
+            while (i < s.length) {
+                if (s[i] === '(') {
+                    const j = s.indexOf(')', i + 1);
+                    if (j > i && j - i - 1 === 1) { measureUnits.push(s[i + 1]); i = j + 1; continue; }
+                }
+                measureUnits.push(s[i]); i++;
+            }
+        }
+        let maxCharWidth = 1;
+        for (const u of measureUnits) {
+			ctx.font = `${fontStyle} ${fontWeight} ${baseFontSize}px ${fontChainForChar(u)}`;
+			const w = ctx.measureText(u).width;
+            if (w > maxCharWidth) maxCharWidth = w;
+        }
+
+        let usedFontSize = baseFontSize;
+        if (settings.autoFit && maxCharWidth > 0) {
+            const slashIdx = settings.content.indexOf('/');
+            const perColumnWidth = slashIdx >= 0 ? Math.max(1, (targetInnerWidth / 2) - 4) : targetInnerWidth;
+            // Fit ignoring scaleX so that scaleX directly scales visual width (e.g., 50% halves width)
+            const scaleW = perColumnWidth / Math.max(1, maxCharWidth);
+            usedFontSize = Math.max(8, Math.min(400, Math.floor(baseFontSize * scaleW)));
+        }
+		ctx.textBaseline = "top";
+		ctx.textAlign = "center";
+
+
+		const topMarginPx = mmToPx(settings.topMarginMm);
+		const bottomMarginPx = mmToPx(settings.bottomMarginMm);
+		const availableHeight = ribbonLengthPx - topMarginPx - bottomMarginPx;
+
+		// draw top/bottom margin guide lines
+		ctx.save();
+		ctx.strokeStyle = "#ef4444"; // red-500
+		ctx.lineWidth = 2;
+		ctx.setLineDash([6, 4]);
+		// top margin line
+		ctx.beginPath();
+		ctx.moveTo(ribbonX, topMarginPx);
+		ctx.lineTo(ribbonX + ribbonWidthPx, topMarginPx);
+		ctx.stroke();
+		// bottom margin line
+		const bottomY = ribbonLengthPx - bottomMarginPx;
+		ctx.beginPath();
+		ctx.moveTo(ribbonX, bottomY);
+		ctx.lineTo(ribbonX + ribbonWidthPx, bottomY);
+		ctx.stroke();
+		// labels for margins (mm)
+		ctx.setLineDash([]);
+		ctx.fillStyle = "#ef4444";
+		ctx.font = "600 12px Arial";
+		ctx.textAlign = "right";
+		ctx.textBaseline = "bottom";
+		ctx.fillText(`${Math.round(settings.topMarginMm)}mm`, ribbonX + ribbonWidthPx - 4, topMarginPx - 2);
+		ctx.textBaseline = "top";
+		ctx.fillText(`${Math.round(settings.bottomMarginMm)}mm`, ribbonX + ribbonWidthPx - 4, bottomY + 2);
+		ctx.restore();
+
+		// Build tokens with optional bracket scaling (no special '/' handling inside brackets for now)
+        type Token = { ch: string; factor: number; col?: 'left' | 'right' };
+        const tokens: Token[] = [];
+        const bracketFactor = Math.max(0.05, settings.bracketScale ?? 0.5);
+        const bracketSpacer = Math.max(0, settings.bracketSpacerFactor ?? 0.5);
+        for (let i = 0; i < settings.content.length; ) {
+            const ch = settings.content[i];
+            if (ch === '[') {
+                // Parse until matching ']'
+                let j = i + 1;
+                let buf = '';
+                while (j < settings.content.length && settings.content[j] !== ']') { buf += settings.content[j]; j++; }
+                if (j < settings.content.length && settings.content[j] === ']') {
+					if (settings.applyBracketScale) tokens.push({ ch: '', factor: bracketSpacer });
+					for (const c of buf) tokens.push({ ch: c, factor: settings.applyBracketScale ? bracketFactor : 1 });
+					if (settings.applyBracketScale) tokens.push({ ch: '', factor: bracketSpacer });
+                    i = j + 1; continue;
+                }
+            }
+            if (ch === '(') {
+                const j = settings.content.indexOf(')', i + 1);
+                if (j > i && j - i - 1 === 1) { tokens.push({ ch: settings.content.slice(i, j + 1), factor: 1 }); i = j + 1; continue; }
+            }
+            tokens.push({ ch, factor: 1 });
+            i++;
+        }
+
+        const charHeight = usedFontSize;
+        const baseGlyphScaleY = Math.max(0.1, settings.scaleY);
+        const baseGlyphScaleX = Math.max(0.1, settings.scaleX);
+        const baselineSpacing = mmToPx(settings.charSpacingMm);
+        const n = tokens.length;
+        let spacingDevice = baselineSpacing;
+        // sum of base heights with token factor and base scaleY
+        const sumBase = tokens.reduce((acc, t) => acc + charHeight * baseGlyphScaleY * t.factor, 0);
+        if (n > 1) {
+            const needed = sumBase + (n - 1) * baselineSpacing;
+            if (needed <= availableHeight) {
+                spacingDevice = baselineSpacing + (availableHeight - needed) / (n - 1);
+            } else {
+                spacingDevice = 0;
+            }
+        } else {
+            spacingDevice = 0;
+        }
+        // additional uniform Y scale so that total exactly fits if still larger
+        const totalWithZeroSpacing = sumBase + (n - 1) * spacingDevice;
+        let additionalScale = 1;
+        if (totalWithZeroSpacing > availableHeight && sumBase > 0) {
+            additionalScale = Math.max(0.05, availableHeight / sumBase);
+        }
+        const tokenHeights = tokens.map(t => {
+            if (t.ch && t.ch.startsWith('(') && t.ch.endsWith(')') && t.ch.length === 3) {
+                // (X) as one unit: height should be based on inner glyph only (no extra space)
+                return charHeight * baseGlyphScaleY * 1 * additionalScale;
+            }
+            return charHeight * baseGlyphScaleY * t.factor * additionalScale;
+        });
+        const totalHeight = tokenHeights.reduce((a,b)=>a+b,0) + (n - 1) * spacingDevice;
+        const yStartDevice = settings.verticalDirection === 'bottom-up'
+            ? topMarginPx + availableHeight - (totalHeight - (n>0?0:0))
+            : topMarginPx;
+
+        // horizontal alignment position
+        let anchorX = ribbonX + Math.round(ribbonWidthPx / 2);
+        if (settings.horizontalAlign === "left") {
+            anchorX = ribbonX + sidePaddingPx;
+            ctx.textAlign = "left";
+        } else if (settings.horizontalAlign === "right") {
+            anchorX = ribbonX + ribbonWidthPx - sidePaddingPx;
+            ctx.textAlign = "right";
+        } else {
+            ctx.textAlign = "center";
+        }
+        // helper: token-specific horizontal scale for (X) so that it never exceeds inner width
+		const isParenSingle = (s?: string) => !!s && s.startsWith('(') && s.endsWith(')') && s.length === 3;
+
+
+        ctx.save();
+        // two-column rendering when '/' exists
+        const slashPos = settings.content.indexOf('/');
+        if (slashPos >= 0) {
+            const drawStream = (text: string, x: number, align: CanvasTextAlign, innerWidth: number) => {
+                // build tokens for the stream
+                const streamTokens: { ch: string; factor: number }[] = [];
+                let inB = false;
+                for (let i = 0; i < text.length; ) {
+                    const c = text[i];
+                    if (c === '[') { if (settings.applyBracketScale) streamTokens.push({ ch: '', factor: bracketSpacer }); inB = true; i++; continue; }
+                    if (c === ']') { if (settings.applyBracketScale) streamTokens.push({ ch: '', factor: bracketSpacer }); inB = false; i++; continue; }
+                    if (c === '(') { const j = text.indexOf(')', i + 1); if (j > i && j - i - 1 === 1) { streamTokens.push({ ch: text.slice(i, j + 1), factor: 1 }); i = j + 1; continue; } }
+                    streamTokens.push({ ch: c, factor: inB && (settings.applyBracketScale ?? false) ? bracketFactor : 1 }); i++;
+                }
+                // layout
+                const sumBaseS = streamTokens.reduce((acc,t)=>acc + charHeight * baseGlyphScaleY * t.factor, 0);
+                let spacingS = baselineSpacing;
+                if (streamTokens.length > 1) {
+                    const need = sumBaseS + (streamTokens.length - 1) * baselineSpacing;
+                    spacingS = need <= availableHeight ? baselineSpacing + (availableHeight - need) / (streamTokens.length - 1) : 0;
+                } else spacingS = 0;
+                const totalS0 = sumBaseS + (streamTokens.length - 1) * spacingS;
+                const addScaleS = totalS0 > availableHeight && sumBaseS > 0 ? Math.max(0.05, availableHeight / sumBaseS) : 1;
+                const heightsS = streamTokens.map(t => (isParenSingle(t.ch) ? charHeight : charHeight * t.factor) * baseGlyphScaleY * addScaleS);
+                let yDevS = yStartDevice;
+                ctx.textAlign = align;
+				for (let k = 0; k < streamTokens.length; k++) {
+                    const t = streamTokens[k];
+                    const h = heightsS[k];
+                    const gY = (baseGlyphScaleY * (isParenSingle(t.ch) ? 1 : t.factor) * addScaleS);
+                    ctx.save();
+                    if (isParenSingle(t.ch)) {
+						const baseChar = t.ch![1];
+						ctx.font = `${fontStyle} ${fontWeight} ${usedFontSize}px ${fontChainForChar(baseChar)}`;
+						const tokenWidth = ctx.measureText(t.ch!).width;
+                        const tokenScaleX = Math.min(1, innerWidth / Math.max(1, tokenWidth));
+                        ctx.scale(baseGlyphScaleX * tokenScaleX, gY);
+						ctx.fillText(t.ch!, x / (baseGlyphScaleX * tokenScaleX), yDevS / gY);
+                    } else {
+						const baseChar = t.ch || ' ';
+						ctx.font = `${fontStyle} ${fontWeight} ${usedFontSize}px ${fontChainForChar(baseChar)}`;
+						ctx.scale(baseGlyphScaleX, gY);
+						if (t.ch) ctx.fillText(t.ch, x / baseGlyphScaleX, yDevS / gY);
+                    }
+                    ctx.restore();
+                    yDevS += h + spacingS;
+                }
+            };
+            const innerW = Math.max(1, (targetInnerWidth / 2) - 4);
+            const leftText = settings.content.slice(0, slashPos);
+            const rightText = settings.content.slice(slashPos + 1);
+            drawStream(leftText, ribbonX + sidePaddingPx, 'left', innerW);
+            drawStream(rightText, ribbonX + ribbonWidthPx - sidePaddingPx, 'right', innerW);
+            ctx.restore();
+            return;
+        }
+        if (settings.verticalDirection === "bottom-up") {
+            let yDev = yStartDevice;
+            let idx = 0;
+            for (const t of [...tokens].reverse()) {
+                const h = tokenHeights[n - 1 - idx];
+                let gY = (baseGlyphScaleY * t.factor * additionalScale);
+                ctx.save();
+					if (isParenSingle(t.ch)) {
+                    gY = (baseGlyphScaleY * 1 * additionalScale);
+						const baseChar = t.ch![1];
+						ctx.font = `${fontStyle} ${fontWeight} ${usedFontSize}px ${fontChainForChar(baseChar)}`;
+						const tokenWidth = ctx.measureText(t.ch!).width;
+                    const innerWidth = t.col ? Math.max(1, (targetInnerWidth/2) - 4) : targetInnerWidth;
+                    const tokenScaleX = Math.min(1, innerWidth / Math.max(1, tokenWidth));
+                    const baseX = t.col === 'left' ? ribbonX + sidePaddingPx : t.col === 'right' ? ribbonX + ribbonWidthPx - sidePaddingPx : anchorX;
+                    ctx.textAlign = t.col === 'left' ? 'left' : t.col === 'right' ? 'right' : ctx.textAlign;
+                    ctx.scale(baseGlyphScaleX * tokenScaleX, gY);
+                    ctx.fillText(t.ch!, baseX / (baseGlyphScaleX * tokenScaleX), yDev / gY);
+                } else {
+						const baseChar = t.ch || ' ';
+						ctx.font = `${fontStyle} ${fontWeight} ${usedFontSize}px ${fontChainForChar(baseChar)}`;
+						ctx.scale(baseGlyphScaleX, gY);
+                    const baseX = t.col === 'left' ? ribbonX + sidePaddingPx : t.col === 'right' ? ribbonX + ribbonWidthPx - sidePaddingPx : anchorX;
+                    ctx.textAlign = t.col === 'left' ? 'left' : t.col === 'right' ? 'right' : ctx.textAlign;
+                    if (t.ch) ctx.fillText(t.ch, baseX / baseGlyphScaleX, yDev / gY);
+                }
+                ctx.restore();
+                yDev += h + spacingDevice;
+                idx++;
+            }
+        } else {
+            let yDev = yStartDevice;
+            let idx = 0;
+            for (const t of tokens) {
+                const h = tokenHeights[idx];
+                let gY = (baseGlyphScaleY * t.factor * additionalScale);
+                ctx.save();
+					if (isParenSingle(t.ch)) {
+                    gY = (baseGlyphScaleY * 1 * additionalScale);
+						const baseChar = t.ch![1];
+						ctx.font = `${fontStyle} ${fontWeight} ${usedFontSize}px ${fontChainForChar(baseChar)}`;
+						const tokenWidth = ctx.measureText(t.ch!).width;
+                    const innerWidth = t.col ? Math.max(1, (targetInnerWidth/2) - 4) : targetInnerWidth;
+                    const tokenScaleX = Math.min(1, innerWidth / Math.max(1, tokenWidth));
+                    const baseX = t.col === 'left' ? ribbonX + sidePaddingPx : t.col === 'right' ? ribbonX + ribbonWidthPx - sidePaddingPx : anchorX;
+                    ctx.textAlign = t.col === 'left' ? 'left' : t.col === 'right' ? 'right' : ctx.textAlign;
+                    ctx.scale(baseGlyphScaleX * tokenScaleX, gY);
+                    ctx.fillText(t.ch!, baseX / (baseGlyphScaleX * tokenScaleX), yDev / gY);
+                } else {
+						const baseChar = t.ch || ' ';
+						ctx.font = `${fontStyle} ${fontWeight} ${usedFontSize}px ${fontChainForChar(baseChar)}`;
+						ctx.scale(baseGlyphScaleX, gY);
+                    const baseX = t.col === 'left' ? ribbonX + sidePaddingPx : t.col === 'right' ? ribbonX + ribbonWidthPx - sidePaddingPx : anchorX;
+                    ctx.textAlign = t.col === 'left' ? 'left' : t.col === 'right' ? 'right' : ctx.textAlign;
+                    if (t.ch) ctx.fillText(t.ch, baseX / baseGlyphScaleX, yDev / gY);
+                }
+                ctx.restore();
+                yDev += h + spacingDevice;
+                idx++;
+            }
+        }
+        ctx.restore();
+	};
+
+    useEffect(() => {
+        drawRibbon(leftCanvasRef.current, leftSettings);
+        drawRibbon(rightCanvasRef.current, rightSettings);
+    }, [leftSettings, rightSettings, ribbonWidthPx, ribbonLengthPx, backgroundColor, fontKorean, fontCjk, fontLatin, baseFontFamily, baseFontSizePx, fontLoadTick]);
+
+	const onLeftChange = <K extends keyof RibbonTextSettings>(key: K, value: RibbonTextSettings[K]) => {
+		setLeftSettings((prev) => {
+			const next = { ...prev, [key]: value } as RibbonTextSettings;
+			// Do not propagate text content to the right side; only non-content settings follow applyBoth
+			if (applyBoth && key !== 'content') {
+				setRightSettings((r) => ({ ...r, [key]: value } as RibbonTextSettings));
+			}
+			return next;
+		});
+	};
+
+	const handleDownload = (side: Side) => {
+		const canvas = side === "left" ? leftCanvasRef.current : rightCanvasRef.current;
+		if (!canvas) return;
+		const url = applyCalibrationToDownload ? makeCalibratedDataUrl(canvas) : canvas.toDataURL("image/png");
+		const a = document.createElement("a");
+		a.href = url;
+		a.download = `ribbon-${side}.png`;
+		a.click();
+	};
+
+	const handlePrint = (side: Side) => {
+		const canvas = side === "left" ? leftCanvasRef.current : rightCanvasRef.current;
+		if (!canvas) return;
+		const dataUrl = makeCalibratedDataUrl(canvas);
+		const w = window.open("");
+		if (!w) return;
+		w.document.write(`<img src="${dataUrl}" style="width:100%" />`);
+		w.document.close();
+		w.focus();
+		w.print();
+	};
+
+	const makeCalibratedDataUrl = (src: HTMLCanvasElement): string => {
+		const scale = Math.max(0.1, printScalePercent / 100);
+		const ox = mmToPx(printOffsetXmm);
+		const oy = mmToPx(printOffsetYmm);
+		const extraW = Math.abs(ox);
+		const extraH = Math.abs(oy);
+		const destW = Math.round(src.width * scale + extraW);
+		const destH = Math.round(src.height * scale + extraH);
+		const tmp = document.createElement("canvas");
+		tmp.width = destW;
+		tmp.height = destH;
+		const ctx = tmp.getContext("2d");
+		if (!ctx) return src.toDataURL("image/png");
+		ctx.setTransform(scale, 0, 0, scale, Math.max(0, ox), Math.max(0, oy));
+		ctx.drawImage(src, 0, 0);
+		return tmp.toDataURL("image/png");
+	};
+
+    // Undo/Redo history support and file open/save
+    type AppState = {
+        ribbonWidthMm: number;
+        ribbonLengthMm: number;
+        backgroundColor: string;
+        applyBoth: boolean;
+        left: RibbonTextSettings;
+        right: RibbonTextSettings;
+    };
+    const [history, setHistory] = useState<AppState[]>([]);
+    const [historyIndex, setHistoryIndex] = useState<number>(-1);
+
+    const snapshot = (): AppState => ({
+        ribbonWidthMm, ribbonLengthMm, backgroundColor, applyBoth, left: leftSettings, right: rightSettings,
+    });
+    const applyState = (s: AppState) => {
+        setRibbonWidthMm(s.ribbonWidthMm);
+        setRibbonLengthMm(s.ribbonLengthMm);
+        setBackgroundColor(s.backgroundColor);
+        setApplyBoth(s.applyBoth);
+        setLeftSettings(s.left);
+        setRightSettings(s.right);
+    };
+    const pushHistory = () => {
+        const snap = snapshot();
+        const next = history.slice(0, historyIndex + 1);
+        next.push(snap);
+        setHistory(next);
+        setHistoryIndex(next.length - 1);
+    };
+    const undo = () => {
+        if (historyIndex <= 0) return;
+        const idx = historyIndex - 1;
+        setHistoryIndex(idx);
+        applyState(history[idx]);
+    };
+    const redo = () => {
+        if (historyIndex >= history.length - 1) return;
+        const idx = historyIndex + 1;
+        setHistoryIndex(idx);
+        applyState(history[idx]);
+    };
+    useEffect(() => {
+        if (historyIndex === -1) {
+            const snap = snapshot();
+            setHistory([snap]);
+            setHistoryIndex(0);
+        }
+    }, []);
+    useEffect(() => { pushHistory(); }, [ribbonWidthMm, ribbonLengthMm, backgroundColor, applyBoth, leftSettings, rightSettings]);
+    // keep scale input mirrors in sync when state changes elsewhere
+    useEffect(() => {
+        setLeftScaleXStr(String(Math.round(leftSettings.scaleX * 100)));
+        setLeftScaleYStr(String(Math.round(leftSettings.scaleY * 100)));
+    }, [leftSettings.scaleX, leftSettings.scaleY]);
+    useEffect(() => {
+        setRightScaleXStr(String(Math.round(rightSettings.scaleX * 100)));
+        setRightScaleYStr(String(Math.round(rightSettings.scaleY * 100)));
+    }, [rightSettings.scaleX, rightSettings.scaleY]);
+
+    const handleSaveJson = () => {
+        const data = JSON.stringify(snapshot(), null, 2);
+        const blob = new Blob([data], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "ribbon-editor.json";
+        a.click();
+        URL.revokeObjectURL(url);
+    };
+    const handleOpenClick = () => fileInputRef.current?.click();
+    const handleOpenJson: React.ChangeEventHandler<HTMLInputElement> = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const text = await file.text();
+        const obj = JSON.parse(text) as AppState;
+        applyState(obj);
+    };
+    const applyPreset = (key: string) => {
+        const p = presets.find(p => p.key === key);
+        if (!p) return;
+        setSelectedPreset(key);
+        setRibbonWidthMm(p.width);
+        setRibbonLengthMm(p.length);
+        // apply margins and ratios to both sides
+        setLeftSettings(ls => ({
+            ...ls,
+            topMarginMm: p.topMm,
+            bottomMarginMm: p.bottomMm,
+            sidePaddingMm: p.laceMm,
+            scaleX: Math.max(0.1, p.scaleXPercent / 100),
+            scaleY: Math.max(0.1, p.scaleYPercent / 100),
+            bracketScale: Math.max(0.05, p.bracketPercent / 100),
+            applyBracketScale: ls.applyBracketScale,
+        }));
+        setRightSettings(rs => ({
+            ...rs,
+            topMarginMm: p.topMm,
+            bottomMarginMm: p.bottomMm,
+            sidePaddingMm: p.laceMm,
+            scaleX: Math.max(0.1, p.scaleXPercent / 100),
+            scaleY: Math.max(0.1, p.scaleYPercent / 100),
+            bracketScale: Math.max(0.05, p.bracketPercent / 100),
+            applyBracketScale: rs.applyBracketScale,
+        }));
+        setPrintOffsetXmm(p.startXmm);
+        setPrintOffsetYmm(p.startYmm);
+        // 미리보기 윗쪽 보조 안내선도 프리셋 참고값으로 동기화
+        setGuide1Mm(p.topMm);
+        setGuide2Mm(p.bottomMm);
+    };
+
+	// load environment on mount
+	useEffect(() => {
+        try {
+			const raw = localStorage.getItem("ribbonEnvV1");
+			if (raw) {
+				const env = JSON.parse(raw);
+				setEnvDefaultPreset(env.defaultPreset ?? envDefaultPreset);
+                setEnvFontSource(env.fontSource ?? envFontSource);
+                setEnvSystemFont(env.systemFont ?? envSystemFont);
+                setEnvWebFontUrl(env.webFontUrl ?? envWebFontUrl); // legacy single
+                setEnvWebFontFamily(env.webFontFamily ?? envWebFontFamily); // legacy single
+                const wf: WebFontItem[] | undefined = env.webFonts;
+                if (Array.isArray(wf) && wf.length > 0) {
+                    setEnvWebFonts(wf);
+                } else if ((env.webFontUrl ?? "") && (env.webFontFamily ?? "")) {
+                    setEnvWebFonts([{ id: `wf-${Date.now()}`, url: env.webFontUrl, family: env.webFontFamily }]);
+                }
+                const wfc: WebFontCssItem[] | undefined = env.webFontCssList;
+                if (Array.isArray(wfc) && wfc.length > 0) setEnvWebFontCssList(wfc);
+				setEnvPrintScale(env.printScale ?? envPrintScale);
+				setEnvOffsetXmm(env.offsetXmm ?? envOffsetXmm);
+				setEnvOffsetYmm(env.offsetYmm ?? envOffsetYmm);
+				applyPreset(env.defaultPreset ?? envDefaultPreset);
+                // apply font
+                if ((env.fontSource ?? envFontSource) === "web") {
+                    injectAllWebFonts(env.webFonts ?? envWebFonts);
+                    injectCustomCssList(env.webFontCssList ?? envWebFontCssList);
+                    const firstFamily = (env.webFonts && env.webFonts[0]?.family) || env.webFontFamily || baseFontFamily;
+                    setBaseFontFamily(firstFamily);
+                } else {
+                    setBaseFontFamily(env.systemFont ?? baseFontFamily);
+                }
+                // load per-script fonts
+                if (env.fontKorean) setFontKorean(env.fontKorean);
+                if (env.fontCjk) setFontCjk(env.fontCjk);
+                if (env.fontLatin) setFontLatin(env.fontLatin);
+				setPrintScalePercent(env.printScale ?? printScalePercent);
+				setPrintOffsetXmm(env.offsetXmm ?? printOffsetXmm);
+				setPrintOffsetYmm(env.offsetYmm ?? printOffsetYmm);
+			}
+		} catch {}
+	}, []);
+
+    const saveEnvironment = () => {
+        const env = {
+			defaultPreset: envDefaultPreset,
+            fontSource: envFontSource,
+            systemFont: envSystemFont,
+            webFontUrl: envWebFontUrl,
+            webFontFamily: envWebFontFamily,
+            webFonts: envWebFonts,
+            webFontCssList: envWebFontCssList,
+			printScale: envPrintScale,
+			offsetXmm: envOffsetXmm,
+			offsetYmm: envOffsetYmm,
+            fontKorean,
+            fontCjk,
+            fontLatin,
+		};
+		localStorage.setItem("ribbonEnvV1", JSON.stringify(env));
+		applyPreset(envDefaultPreset);
+        if (envFontSource === "web") {
+            injectAllWebFonts(envWebFonts);
+            injectCustomCssList(envWebFontCssList);
+            const firstFamily = envWebFonts[0]?.family || envWebFontFamily || baseFontFamily;
+            setBaseFontFamily(firstFamily);
+        } else {
+            setBaseFontFamily(envSystemFont);
+        }
+        // No need to set per-script here; they are controlled by state above
+        setPrintScalePercent(envPrintScale);
+		setPrintOffsetXmm(envOffsetXmm);
+		setPrintOffsetYmm(envOffsetYmm);
+		setEnvOpen(false);
+	};
+
+    const clearInjectedWebFonts = () => {
+        const legacy = document.getElementById('dynamic-webfont-link');
+        if (legacy) legacy.remove();
+        const nodes = Array.from(document.querySelectorAll('link[id^="dynamic-webfont-link-"], style[id^="dynamic-webfont-face-"]'));
+        nodes.forEach(n => n.parentElement?.removeChild(n));
+    };
+    const injectWebFont = (url: string, idSuffix: string) => {
+        const id = `dynamic-webfont-link-${idSuffix}`;
+        let el = document.getElementById(id) as HTMLLinkElement | null;
+        if (!el) {
+            el = document.createElement('link');
+            el.id = id;
+            el.rel = 'stylesheet';
+            document.head.appendChild(el);
+        }
+        el.href = url;
+    };
+    const injectFaceFont = (family: string, url: string, idSuffix: string) => {
+        const id = `dynamic-webfont-face-${idSuffix}`;
+        let el = document.getElementById(id) as HTMLStyleElement | null;
+        if (!el) {
+            el = document.createElement('style');
+            el.id = id;
+            document.head.appendChild(el);
+        }
+        const safeFamily = family.replace(/"/g, '\\"');
+        el.textContent = `@font-face{font-family:"${safeFamily}";src:url("${url}") format("${url.endsWith('.otf') ? 'opentype' : url.endsWith('.ttf') ? 'truetype' : url.endsWith('.woff2') ? 'woff2' : 'woff'}");font-weight:normal;font-style:normal;font-display:swap;}`;
+    };
+    const injectAllWebFonts = (items: WebFontItem[] = []) => {
+        clearInjectedWebFonts();
+        items.forEach((it, idx) => {
+            const u = it.url || '';
+            if (/\.(woff2?|ttf|otf)(\?|$)/i.test(u)) injectFaceFont(it.family, u, String(idx));
+            else injectWebFont(u, String(idx));
+        });
+        try {
+            const navFonts = (document as { fonts?: { load?: (font: string) => Promise<FontFace[]> } }).fonts;
+            if (navFonts && navFonts.load) {
+                Promise.all(items.map(it => navFonts.load!(`16px "${it.family}"`))).then(() => {
+                    setFontLoadTick(t => t + 1);
+                }).catch(() => setFontLoadTick(t => t + 1));
+            } else {
+                setFontLoadTick(t => t + 1);
+            }
+        } catch { setFontLoadTick(t => t + 1); }
+    };
+    const injectCustomCssList = (items: WebFontCssItem[] = []) => {
+        items.forEach((it, idx) => {
+            const id = `dynamic-webfont-css-${idx}`;
+            let el = document.getElementById(id) as HTMLStyleElement | null;
+            if (!el) { el = document.createElement('style'); el.id = id; document.head.appendChild(el); }
+            el.textContent = it.css;
+        });
+        setFontLoadTick(t => t + 1);
+    };
+
+  return (
+		<div className="min-h-screen bg-white text-gray-900">
+			<header className="sticky top-0 z-10 border-b border-gray-200 bg-white/85 backdrop-blur">
+				<div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+                    <h1 className="text-lg font-semibold">리본 인쇄 에디터 (웹)</h1>
+                    <div className="flex items-center gap-2 text-sm">
+                        <button onClick={() => { setLeftSettings({ ...leftSettings, content: "" }); setRightSettings({ ...rightSettings, content: "" }); }} className="px-3 py-1.5 btn-blue"><PlusCircle className="w-4 h-4 inline mr-1"/>새리본</button>
+                        <button onClick={handleOpenClick} className="px-3 py-1.5 btn-blue"><FolderOpen className="w-4 h-4 inline mr-1"/>파일열기</button>
+                        <button onClick={handleSaveJson} className="px-3 py-1.5 btn-blue"><Save className="w-4 h-4 inline mr-1"/>저장</button>
+                        <button onClick={undo} className="px-2 py-1.5 input-bevel"><Undo2 className="w-4 h-4"/></button>
+                        <button onClick={redo} className="px-2 py-1.5 input-bevel"><Redo2 className="w-4 h-4"/></button>
+                        <button onClick={() => { window.open("#help", "_blank"); }} className="px-2 py-1.5 input-bevel"><HelpCircle className="w-4 h-4"/></button>
+                        <button onClick={() => setEnvOpen(true)} className="px-3 py-1.5 input-bevel"><Settings className="w-4 h-4 inline mr-1"/>환경설정</button>
+                        <label className="inline-flex items-center gap-2 ml-3"><input type="checkbox" checked={applyBoth} onChange={(e) => setApplyBoth(e.target.checked)} /> 동시적용</label>
+                                <div className="flex items-center gap-2 ml-3">
+                            <span className="text-gray-600">배율</span>
+                                    <input type="range" min={0.2} max={1} step={0.1} value={scale} onChange={(e) => setScale(Number(e.target.value))} disabled={fitBoth} />
+                                    <label className="inline-flex items-center gap-1 text-xs text-gray-600">
+                                        <input type="checkbox" checked={fitBoth} onChange={(e)=>setFitBoth(e.target.checked)} /> 두줄 자동 맞춤
+                                    </label>
+                                    {fitBoth && <span className="text-xs text-gray-500">x{effectiveScale.toFixed(2)}</span>}
+                        </div>
+                    </div>
+				</div>
+			</header>
+
+			<div className="max-w-7xl mx-auto p-4 grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <section ref={leftPanelRef} className="lg:col-span-1 panel rounded-lg p-4">
+					<h2 className="font-medium mb-3">설정</h2>
+                    <div className="space-y-3">
+                        <div className="flex items-center gap-3">
+						<div className="flex items-center gap-1">
+							<button type="button" onClick={() => {
+								const idx = presets.findIndex(p => p.key === selectedPreset);
+								const nextIdx = (idx - 1 + presets.length) % presets.length;
+								applyPreset(presets[nextIdx].key);
+							}} className="rounded-md border px-2 py-2 text-xs"><ChevronLeft className="w-4 h-4"/></button>
+                                <select value={selectedPreset} onChange={(e) => applyPreset(e.target.value)} className="input-bevel px-3 py-2 text-sm min-w-[220px]">
+                                    {presets.map(p => (
+                                        <option key={p.key} value={p.key}>{getPresetDisplayLabel(p)}</option>
+                                    ))}
+							</select>
+							<button type="button" onClick={() => {
+								const idx = presets.findIndex(p => p.key === selectedPreset);
+								const nextIdx = (idx + 1) % presets.length;
+								applyPreset(presets[nextIdx].key);
+							}} className="rounded-md border px-2 py-2 text-xs"><ChevronRight className="w-4 h-4"/></button>
+                                <button type="button" onClick={() => setPresetOpen(true)} className="rounded-md border px-2 py-2 text-xs ml-2">리본 목록 편집</button>
+						</div>
+                            <label className="inline-flex items-center gap-2 text-sm"><input type="checkbox" checked={applyBoth} onChange={(e) => setApplyBoth(e.target.checked)} /> 동시적용</label>
+                        </div>
+						<div className="grid grid-cols-2 gap-3">
+                            <label className="block col-span-1">
+								<span className="block text-sm text-gray-600">리본 폭(mm)</span>
+                                <input type="number" value={ribbonWidthMm} onChange={(e) => setRibbonWidthMm(Number(e.target.value) || 1)} className="mt-1 w-full input-bevel px-3 py-2 text-sm" min={10} max={200} />
+							</label>
+                            <label className="block col-span-1">
+								<span className="block text-sm text-gray-600">리본 길이(mm)</span>
+                                <input type="number" value={ribbonLengthMm} onChange={(e) => setRibbonLengthMm(Number(e.target.value) || 1)} className="mt-1 w-full input-bevel px-3 py-2 text-sm" min={50} max={5000} />
+							</label>
+						</div>
+
+                        <div className="panel rounded-md p-3">
+							<div className="font-medium text-sm mb-2">좌측: {leftSettings.label}</div>
+                            <div className="grid grid-cols-3 gap-2 mb-2">
+                                <select value={leftSampleCat} onChange={(e) => setLeftSampleCat(e.target.value)} className="input-bevel px-2 py-2 text-sm">
+                                    {samples.map(c => <option key={c.key} value={c.key}>{c.name}</option>)}
+                                </select>
+                                <select onChange={(e) => { const cat = samples.find(c => c.key === leftSampleCat); const item = cat?.items.find(i => i.label === e.target.value); if (item) setLeftSettings(p => ({ ...p, content: preferHanjaFromLabel(item.label, item.value) })); }} className="col-span-2 input-bevel px-2 py-2 text-sm">
+                                    {(samples.find(c => c.key === leftSampleCat)?.items ?? []).map(it => <option key={it.label} value={it.label}>{it.label}</option>)}
+                                </select>
+                            </div>
+							<label className="block mb-2">
+								<span className="block text-sm text-gray-600">텍스트</span>
+								<input value={leftSettings.content} onChange={(e) => onLeftChange("content", e.target.value)} className="mt-1 w-full rounded-md border px-3 py-2 text-sm" />
+							</label>
+                            {/* 개별 폰트/크기 설정 제거됨 (전역 폰트 설정 사용) */}
+							<div className="grid grid-cols-3 gap-3 mt-2">
+								<label className="inline-flex items-center gap-2 text-sm"><input type="checkbox" checked={leftSettings.isBold} onChange={(e) => onLeftChange("isBold", e.target.checked)} /> Bold</label>
+								<label className="inline-flex items-center gap-2 text-sm"><input type="checkbox" checked={leftSettings.isItalic} onChange={(e) => onLeftChange("isItalic", e.target.checked)} /> Italic</label>
+								<label className="block">
+									<span className="block text-sm text-gray-600">텍스트 색</span>
+                                    <input type="color" value={leftSettings.color} onChange={(e) => onLeftChange("color", e.target.value)} className="mt-1 h-9 w-full input-bevel px-2" />
+								</label>
+							</div>
+                            <div className="grid grid-cols-3 gap-3 mt-2">
+								<label className="block">
+									<span className="block text-sm text-gray-600">문자 간격(mm)</span>
+                                    <input type="number" value={leftSettings.charSpacingMm} onChange={(e) => onLeftChange("charSpacingMm", Number(e.target.value) || 0)} className="mt-1 w-full input-bevel px-3 py-2 text-sm" min={0} max={50} />
+								</label>
+								<label className="block">
+									<span className="block text-sm text-gray-600">상단 여백(mm)</span>
+                                    <input type="number" value={leftSettings.topMarginMm} onChange={(e) => onLeftChange("topMarginMm", Number(e.target.value) || 0)} className="mt-1 w-full input-bevel px-3 py-2 text-sm" min={0} max={200} />
+								</label>
+								<label className="block">
+									<span className="block text-sm text-gray-600">하단 여백(mm)</span>
+                                    <input type="number" value={leftSettings.bottomMarginMm} onChange={(e) => onLeftChange("bottomMarginMm", Number(e.target.value) || 0)} className="mt-1 w-full input-bevel px-3 py-2 text-sm" min={0} max={200} />
+								</label>
+                                <label className="block">
+                                    <span className="block text-sm text-gray-600">가로 비율(%)</span>
+                                    <input type="text" inputMode="numeric" pattern="[0-9]*" value={leftScaleXStr} onChange={(e) => {
+                                        const v = e.target.value;
+                                        if (/^\d{0,3}$/.test(v)) setLeftScaleXStr(v);
+                                    }} onBlur={() => {
+                                        const n = Number(leftScaleXStr);
+                                        const clamped = isNaN(n) ? Math.round(leftSettings.scaleX * 100) : Math.max(10, Math.min(300, n));
+                                        setLeftScaleXStr(String(clamped));
+                                        onLeftChange("scaleX", clamped / 100);
+                                    }} className="mt-1 w-full input-bevel px-3 py-2 text-sm" />
+                                </label>
+                                <label className="block">
+                                    <span className="block text-sm text-gray-600">세로 비율(%)</span>
+                                    <input type="text" inputMode="numeric" pattern="[0-9]*" value={leftScaleYStr} onChange={(e) => {
+                                        const v = e.target.value;
+                                        if (/^\d{0,3}$/.test(v)) setLeftScaleYStr(v);
+                                    }} onBlur={() => {
+                                        const n = Number(leftScaleYStr);
+                                        const clamped = isNaN(n) ? Math.round(leftSettings.scaleY * 100) : Math.max(10, Math.min(300, n));
+                                        setLeftScaleYStr(String(clamped));
+                                        onLeftChange("scaleY", clamped / 100);
+                                    }} className="mt-1 w-full input-bevel px-3 py-2 text-sm" />
+                                </label>
+							<label className="block">
+								<span className="block text-sm text-gray-600">가로 정렬</span>
+                                    <select value={leftSettings.horizontalAlign} onChange={(e) => onLeftChange("horizontalAlign", e.target.value as "left" | "center" | "right")} className="mt-1 w-full input-bevel px-3 py-2 text-sm">
+									<option value="left">왼쪽</option>
+									<option value="center">가운데</option>
+									<option value="right">오른쪽</option>
+								</select>
+							</label>
+							<label className="block">
+								<span className="block text-sm text-gray-600">세로 방향</span>
+                                    <select value={leftSettings.verticalDirection} onChange={(e) => onLeftChange("verticalDirection", e.target.value as "top-down" | "bottom-up")} className="mt-1 w-full input-bevel px-3 py-2 text-sm">
+									<option value="top-down">위→아래</option>
+									<option value="bottom-up">아래→위</option>
+								</select>
+							</label>
+								<label className="inline-flex items-center gap-2 text-sm col-span-3"><input type="checkbox" checked={leftSettings.autoFit} onChange={(e) => onLeftChange("autoFit", e.target.checked)} /> 리본 폭에 맞게 자동 폰트 크기</label>
+								<label className="block col-span-3">
+									<span className="block text-sm text-gray-600">양옆 여백(mm)</span>
+									<input type="number" value={leftSettings.sidePaddingMm} onChange={(e) => onLeftChange("sidePaddingMm", Number(e.target.value) || 0)} className="mt-1 w-full rounded-md border px-3 py-2 text-sm" min={0} max={20} />
+								</label>
+							</div>
+						</div>
+
+                        <div className="panel rounded-md p-3">
+							<div className="font-medium text-sm mb-2">우측: {rightSettings.label}</div>
+                            <div className="grid grid-cols-3 gap-2 mb-2">
+                                <select value={rightSenderCat} onChange={(e) => setRightSenderCat(e.target.value)} className="input-bevel px-2 py-2 text-sm">
+                                    {senderSamples.map(c => <option key={c.key} value={c.key}>{c.name}</option>)}
+                                </select>
+                                <select onChange={(e) => { const cat = senderSamples.find(c => c.key === rightSenderCat); const item = cat?.items.find(i => i.label === e.target.value); if (item) setRightSettings(p => ({ ...p, content: item.value })); }} className="col-span-2 input-bevel px-2 py-2 text-sm">
+                                    {(senderSamples.find(c => c.key === rightSenderCat)?.items ?? []).map(it => <option key={it.label} value={it.label}>{it.label}</option>)}
+                                </select>
+                            </div>
+							<label className="block mb-2">
+								<span className="block text-sm text-gray-600">텍스트</span>
+								<input value={rightSettings.content} onChange={(e) => setRightSettings((p) => ({ ...p, content: e.target.value }))} className="mt-1 w-full rounded-md border px-3 py-2 text-sm" />
+							</label>
+                            {/* 개별 폰트/크기 설정 제거됨 (전역 폰트 설정 사용) */}
+							<div className="grid grid-cols-3 gap-3 mt-2">
+								<label className="inline-flex items-center gap-2 text-sm"><input type="checkbox" checked={rightSettings.isBold} onChange={(e) => setRightSettings((p) => ({ ...p, isBold: e.target.checked }))} /> Bold</label>
+								<label className="inline-flex items-center gap-2 text-sm"><input type="checkbox" checked={rightSettings.isItalic} onChange={(e) => setRightSettings((p) => ({ ...p, isItalic: e.target.checked }))} /> Italic</label>
+								<label className="block">
+									<span className="block text-sm text-gray-600">텍스트 색</span>
+                                    <input type="color" value={rightSettings.color} onChange={(e) => setRightSettings((p) => ({ ...p, color: e.target.value }))} className="mt-1 h-9 w-full input-bevel px-2" />
+								</label>
+							</div>
+                            <div className="grid grid-cols-3 gap-3 mt-2">
+								<label className="block">
+									<span className="block text-sm text-gray-600">문자 간격(mm)</span>
+                                    <input type="number" value={rightSettings.charSpacingMm} onChange={(e) => setRightSettings((p) => ({ ...p, charSpacingMm: Number(e.target.value) || 0 }))} className="mt-1 w-full input-bevel px-3 py-2 text-sm" min={0} max={50} />
+								</label>
+								<label className="block">
+									<span className="block text-sm text-gray-600">상단 여백(mm)</span>
+                                    <input type="number" value={rightSettings.topMarginMm} onChange={(e) => setRightSettings((p) => ({ ...p, topMarginMm: Number(e.target.value) || 0 }))} className="mt-1 w-full input-bevel px-3 py-2 text-sm" min={0} max={200} />
+								</label>
+								<label className="block">
+									<span className="block text-sm text-gray-600">하단 여백(mm)</span>
+                                    <input type="number" value={rightSettings.bottomMarginMm} onChange={(e) => setRightSettings((p) => ({ ...p, bottomMarginMm: Number(e.target.value) || 0 }))} className="mt-1 w-full input-bevel px-3 py-2 text-sm" min={0} max={200} />
+								</label>
+                                <label className="block">
+                                    <span className="block text-sm text-gray-600">가로 비율(%)</span>
+                                    <input type="text" inputMode="numeric" pattern="[0-9]*" value={rightScaleXStr} onChange={(e) => {
+                                        const v = e.target.value;
+                                        if (/^\d{0,3}$/.test(v)) setRightScaleXStr(v);
+                                    }} onBlur={() => {
+                                        const n = Number(rightScaleXStr);
+                                        const clamped = isNaN(n) ? Math.round(rightSettings.scaleX * 100) : Math.max(10, Math.min(300, n));
+                                        setRightScaleXStr(String(clamped));
+                                        setRightSettings((p) => ({ ...p, scaleX: clamped / 100 }));
+                                    }} className="mt-1 w-full input-bevel px-3 py-2 text-sm" />
+                                </label>
+                                <label className="block">
+                                    <span className="block text-sm text-gray-600">세로 비율(%)</span>
+                                    <input type="text" inputMode="numeric" pattern="[0-9]*" value={rightScaleYStr} onChange={(e) => {
+                                        const v = e.target.value;
+                                        if (/^\d{0,3}$/.test(v)) setRightScaleYStr(v);
+                                    }} onBlur={() => {
+                                        const n = Number(rightScaleYStr);
+                                        const clamped = isNaN(n) ? Math.round(rightSettings.scaleY * 100) : Math.max(10, Math.min(300, n));
+                                        setRightScaleYStr(String(clamped));
+                                        setRightSettings((p) => ({ ...p, scaleY: clamped / 100 }));
+                                    }} className="mt-1 w-full input-bevel px-3 py-2 text-sm" />
+                                </label>
+							<label className="block">
+								<span className="block text-sm text-gray-600">가로 정렬</span>
+                                    <select value={rightSettings.horizontalAlign} onChange={(e) => setRightSettings((p) => ({ ...p, horizontalAlign: e.target.value as "left" | "center" | "right" }))} className="mt-1 w-full input-bevel px-3 py-2 text-sm">
+									<option value="left">왼쪽</option>
+									<option value="center">가운데</option>
+									<option value="right">오른쪽</option>
+								</select>
+							</label>
+							<label className="block">
+								<span className="block text-sm text-gray-600">세로 방향</span>
+                                    <select value={rightSettings.verticalDirection} onChange={(e) => setRightSettings((p) => ({ ...p, verticalDirection: e.target.value as "top-down" | "bottom-up" }))} className="mt-1 w-full input-bevel px-3 py-2 text-sm">
+									<option value="top-down">위→아래</option>
+									<option value="bottom-up">아래→위</option>
+								</select>
+							</label>
+							<label className="inline-flex items-center gap-2 text-sm col-span-3"><input type="checkbox" checked={rightSettings.autoFit} onChange={(e) => setRightSettings((p) => ({ ...p, autoFit: e.target.checked }))} /> 리본 폭에 맞게 자동 폰트 크기</label>
+							<label className="block col-span-3">
+								<span className="block text-sm text-gray-600">양옆 여백(mm)</span>
+								<input type="number" value={rightSettings.sidePaddingMm} onChange={(e) => setRightSettings((p) => ({ ...p, sidePaddingMm: Number(e.target.value) || 0 }))} className="mt-1 w-full rounded-md border px-3 py-2 text-sm" min={0} max={20} />
+							</label>
+							</div>
+						</div>
+
+					{/* 전역 폰트 설정(스크립트별) — 위치 상단으로 이동 */}
+                    <div className="rounded-md border p-3 mt-3">
+						<div className="font-medium text-sm mb-2">폰트 설정(전역 · 스크립트별)</div>
+                        <div className="flex items-center gap-2 mb-2 text-xs">
+                            <button className="input-bevel px-2 py-1" onClick={loadSystemFonts} disabled={loadingSystemFonts}>{loadingSystemFonts? '불러오는 중...' : '시스템 폰트 불러오기(실험적)'}</button>
+                            {systemFontError && <span className="text-red-600">{systemFontError}</span>}
+                        </div>
+                        <div className="grid grid-cols-3 gap-3 text-sm">
+                            <label className="block">
+                                <span className="block text-gray-600">한글</span>
+                                <select value={fontKorean} onChange={(e) => setFontKorean(e.target.value)} className="mt-1 w-full input-bevel px-3 py-2">
+                                    {envWebFonts.map(wf => (
+                                        <option key={`wf_${wf.family}`} value={wf.family}>{wf.family}</option>
+                                    ))}
+                                    {systemFontList.filter(n => !envWebFonts.some(w => w.family === n)).map(name => (
+                                        <option key={`sys_${name}`} value={name}>{name}</option>
+                                    ))}
+                                    {[...koreanFontOptions, ...windowsFontOptions]
+                                        .filter(f => !systemFontList.includes(f.key) && !envWebFonts.some(w => w.family === f.key))
+                                        .map(f => (<option key={f.key} value={f.key}>{f.label}</option>))}
+                                    {![...koreanFontOptions, ...windowsFontOptions].some(f => f.key === fontKorean) && !systemFontList.includes(fontKorean) && !envWebFonts.some(w => w.family === fontKorean) && (
+                                        <option value={fontKorean}>{fontKorean}</option>
+                                    )}
+                                </select>
+                            </label>
+                            <label className="block">
+                                <span className="block text-gray-600">한자</span>
+                                <select value={fontCjk} onChange={(e) => setFontCjk(e.target.value)} className="mt-1 w-full input-bevel px-3 py-2">
+                                    {envWebFonts.map(wf => (
+                                        <option key={`wf2_${wf.family}`} value={wf.family}>{wf.family}</option>
+                                    ))}
+                                    {systemFontList.filter(n => !envWebFonts.some(w => w.family === n)).map(name => (
+                                        <option key={`sys2_${name}`} value={name}>{name}</option>
+                                    ))}
+                                    {[...windowsFontOptions, ...koreanFontOptions]
+                                        .filter(f => !systemFontList.includes(f.key) && !envWebFonts.some(w => w.family === f.key))
+                                        .map(f => (<option key={f.key} value={f.key}>{f.label}</option>))}
+                                    {![...windowsFontOptions, ...koreanFontOptions].some(f => f.key === fontCjk) && !systemFontList.includes(fontCjk) && !envWebFonts.some(w => w.family === fontCjk) && (
+                                        <option value={fontCjk}>{fontCjk}</option>
+                                    )}
+                                </select>
+                            </label>
+                            <label className="block">
+                                <span className="block text-gray-600">영문</span>
+                                <select value={fontLatin} onChange={(e) => setFontLatin(e.target.value)} className="mt-1 w-full input-bevel px-3 py-2">
+                                    {envWebFonts.map(wf => (
+                                        <option key={`wf3_${wf.family}`} value={wf.family}>{wf.family}</option>
+                                    ))}
+                                    {systemFontList.filter(n => !envWebFonts.some(w => w.family === n)).map(name => (
+                                        <option key={`sys3_${name}`} value={name}>{name}</option>
+                                    ))}
+                                    {latinFontOptions
+                                        .filter(f => !systemFontList.includes(f.key) && !envWebFonts.some(w => w.family === f.key))
+                                        .map(f => (<option key={f.key} value={f.key}>{f.label}</option>))}
+                                    {!latinFontOptions.some(f => f.key === fontLatin) && !systemFontList.includes(fontLatin) && !envWebFonts.some(w => w.family === fontLatin) && (
+                                        <option value={fontLatin}>{fontLatin}</option>
+                                    )}
+                                </select>
+                            </label>
+							<p className="col-span-3 text-xs text-gray-500">여기서 지정한 폰트가 글자 유형(한글/한자/영문)에 따라 자동 적용됩니다.</p>
+						</div>
+					</div>
+
+						{/* 표시/가이드 설정 */}
+						<div className="rounded-md border p-3 mt-3">
+							<div className="font-medium text-sm mb-2">표시/가이드</div>
+							<div className="grid grid-cols-3 gap-3">
+								<label className="inline-flex items-center gap-2 text-sm">
+									<input type="checkbox" checked={showRuler} onChange={(e) => setShowRuler(e.target.checked)} /> 눈금 표시
+								</label>
+								<label className="inline-flex items-center gap-2 text-sm">
+									<input type="checkbox" checked={showGuides} onChange={(e) => setShowGuides(e.target.checked)} /> 가이드 표시
+								</label>
+								<label className="block">
+									<span className="block text-sm text-gray-600">상단 가이드(mm)</span>
+									<input type="number" value={guide1Mm} onChange={(e) => setGuide1Mm(Number(e.target.value) || 0)} className="mt-1 w-full rounded-md border px-3 py-2 text-sm" />
+								</label>
+								<label className="block">
+									<span className="block text-sm text-gray-600">하단 가이드(mm)</span>
+									<input type="number" value={guide2Mm} onChange={(e) => setGuide2Mm(Number(e.target.value) || 0)} className="mt-1 w-full rounded-md border px-3 py-2 text-sm" />
+								</label>
+							</div>
+						</div>
+
+						{/* 출력 보정 */}
+						<div className="rounded-md border p-3 mt-3">
+							<div className="font-medium text-sm mb-2">출력 보정(베너 드라이버 대응)</div>
+							<div className="grid grid-cols-3 gap-3">
+								<label className="block">
+									<span className="block text-sm text-gray-600">스케일(%)</span>
+									<input type="number" value={printScalePercent} onChange={(e) => setPrintScalePercent(Number(e.target.value) || 100)} className="mt-1 w-full rounded-md border px-3 py-2 text-sm" min={10} max={300} />
+								</label>
+								<label className="block">
+									<span className="block text-sm text-gray-600">가로 오프셋(mm)</span>
+									<input type="number" value={printOffsetXmm} onChange={(e) => setPrintOffsetXmm(Number(e.target.value) || 0)} className="mt-1 w-full rounded-md border px-3 py-2 text-sm" min={-100} max={100} />
+								</label>
+								<label className="block">
+									<span className="block text-sm text-gray-600">세로 오프셋(mm)</span>
+									<input type="number" value={printOffsetYmm} onChange={(e) => setPrintOffsetYmm(Number(e.target.value) || 0)} className="mt-1 w-full rounded-md border px-3 py-2 text-sm" min={-100} max={100} />
+								</label>
+								<label className="inline-flex items-center gap-2 text-sm col-span-3">
+									<input type="checkbox" checked={applyCalibrationToDownload} onChange={(e) => setApplyCalibrationToDownload(e.target.checked)} /> 다운로드에 보정 적용
+								</label>
+							</div>
+						</div>
+
+                        {/* 배경색 — 위치를 폰트설정 아래로 이동 */}
+                        <div className="grid grid-cols-3 gap-3 mt-3">
+                            <label className="block">
+                                <span className="block text-sm text-gray-600">배경색</span>
+                                <input type="color" value={backgroundColor} onChange={(e) => setBackgroundColor(e.target.value)} className="mt-1 h-10 w-full rounded-md border px-2" />
+                            </label>
+                        </div>
+					</div>
+				</section>
+
+                <section className="lg:col-span-2 rounded-lg border border-gray-200 p-4">
+					<h2 className="font-medium mb-3">미리보기</h2>
+                    <div ref={previewContainerRef} className="w-full overflow-auto border rounded-md p-6 bg-gray-50 flex items-start justify-center" style={{ maxHeight: Math.max(200, leftPanelHeight - 80) }}>
+                        <div className={`flex gap-10`} style={{ transform: `scale(${effectiveScale})`, transformOrigin: 'top center' }}>
+							<div>
+								<canvas ref={leftCanvasRef} style={{ display: "block" }} />
+								<div className="mt-2 flex gap-2 text-xs">
+									<button onClick={() => handlePrint("left")} className="rounded border px-2 py-1"><Printer className="w-3 h-3" /> 좌 인쇄</button>
+									<button onClick={() => handleDownload("left")} className="rounded border px-2 py-1"><Download className="w-3 h-3" /> 좌 저장</button>
+								</div>
+							</div>
+							<div>
+								<canvas ref={rightCanvasRef} style={{ display: "block" }} />
+								<div className="mt-2 flex gap-2 text-xs">
+									<button onClick={() => handlePrint("right")} className="rounded border px-2 py-1"><Printer className="w-3 h-3" /> 우 인쇄</button>
+									<button onClick={() => handleDownload("right")} className="rounded border px-2 py-1"><Download className="w-3 h-3" /> 우 저장</button>
+								</div>
+							</div>
+                        </div>
+					</div>
+                </section>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+        <input ref={fileInputRef} type="file" accept="application/json" className="hidden" onChange={handleOpenJson} />
+        {presetOpen && (
+            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+                <div className="panel rounded-lg w-full max-w-4xl p-4 bg-white">
+                    <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-base font-semibold">리본 목록 편집</h3>
+                        <button className="input-bevel px-2 py-1" onClick={() => setPresetOpen(false)}>닫기</button>
+                    </div>
+                    <div className="overflow-auto border rounded">
+                        <table className="min-w-full text-xs">
+                            <thead className="bg-gray-100">
+                                <tr>
+                                    <th className="px-2 py-2 text-left w-56">리본이름</th>
+                                    <th className="px-2 py-2">넓이</th>
+                                    <th className="px-2 py-2">레이스</th>
+                                    <th className="px-2 py-2">길이</th>
+                                    <th className="px-2 py-2">상단</th>
+                                    <th className="px-2 py-2">하단</th>
+                                    <th className="px-2 py-2">축소비율</th>
+                                    <th className="px-2 py-2">가로비율</th>
+                                    <th className="px-2 py-2">세로비율</th>
+                                    <th className="px-2 py-2">여백</th>
+                                    <th className="px-2 py-2">가로시작</th>
+                                    <th className="px-2 py-2">세로시작</th>
+                                    <th className="px-2 py-2"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {presets.map((p, idx) => (
+                                    <tr key={p.key || `${p.width}x${p.length}-${idx}`} className="odd:bg-white even:bg-gray-50">
+                                        <td className="px-2 py-1 w-56"><input value={p.label} placeholder={`${p.width}x${p.length}mm`} onChange={(e)=>{
+                                            const next=[...presets]; next[idx]={...p,label:e.target.value}; savePresets(next);
+                                        }} className="input-bevel px-2 py-1 w-56 min-w-[220px]"/></td>
+                                        <td className="px-2 py-1"><input type="number" value={p.width} onChange={(e)=>{const next=[...presets]; next[idx]={...p,width:Number(e.target.value)||0}; savePresets(next);}} className="w-20 input-bevel px-2 py-1"/></td>
+                                        <td className="px-2 py-1"><input type="number" value={p.laceMm} onChange={(e)=>{const next=[...presets]; next[idx]={...p,laceMm:Number(e.target.value)||0}; savePresets(next);}} className="w-20 input-bevel px-2 py-1"/></td>
+                                        <td className="px-2 py-1"><input type="number" value={p.length} onChange={(e)=>{const next=[...presets]; next[idx]={...p,length:Number(e.target.value)||0}; savePresets(next);}} className="w-24 input-bevel px-2 py-1"/></td>
+                                        <td className="px-2 py-1"><input type="number" value={p.topMm} onChange={(e)=>{const next=[...presets]; next[idx]={...p,topMm:Number(e.target.value)||0}; savePresets(next);}} className="w-20 input-bevel px-2 py-1"/></td>
+                                        <td className="px-2 py-1"><input type="number" value={p.bottomMm} onChange={(e)=>{const next=[...presets]; next[idx]={...p,bottomMm:Number(e.target.value)||0}; savePresets(next);}} className="w-20 input-bevel px-2 py-1"/></td>
+                                        <td className="px-2 py-1"><input type="number" value={p.bracketPercent} onChange={(e)=>{const next=[...presets]; next[idx]={...p,bracketPercent:Number(e.target.value)||0}; savePresets(next);}} className="w-24 input-bevel px-2 py-1"/></td>
+                                        <td className="px-2 py-1"><input type="number" value={p.scaleXPercent} onChange={(e)=>{const next=[...presets]; next[idx]={...p,scaleXPercent:Number(e.target.value)||0}; savePresets(next);}} className="w-24 input-bevel px-2 py-1"/></td>
+                                        <td className="px-2 py-1"><input type="number" value={p.scaleYPercent} onChange={(e)=>{const next=[...presets]; next[idx]={...p,scaleYPercent:Number(e.target.value)||0}; savePresets(next);}} className="w-24 input-bevel px-2 py-1"/></td>
+                                        <td className="px-2 py-1"><input type="number" value={p.marginMm} onChange={(e)=>{const next=[...presets]; next[idx]={...p,marginMm:Number(e.target.value)||0}; savePresets(next);}} className="w-24 input-bevel px-2 py-1"/></td>
+                                        <td className="px-2 py-1"><input type="number" value={p.startXmm} onChange={(e)=>{const next=[...presets]; next[idx]={...p,startXmm:Number(e.target.value)||0}; savePresets(next);}} className="w-24 input-bevel px-2 py-1"/></td>
+                                        <td className="px-2 py-1"><input type="number" value={p.startYmm} onChange={(e)=>{const next=[...presets]; next[idx]={...p,startYmm:Number(e.target.value)||0}; savePresets(next);}} className="w-24 input-bevel px-2 py-1"/></td>
+                                        <td className="px-2 py-1 text-right">
+                                            <button className="px-2 py-1 text-red-600" onClick={()=>{
+                                                const next=presets.filter((_,i)=>i!==idx);
+                                                savePresets(next);
+                                                if (p.key===selectedPreset && next[0]) applyPreset(next[0].key);
+                                            }}>삭제</button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div className="flex items-center justify-between mt-3">
+                        <button className="input-bevel px-3 py-2" onClick={()=>{
+                            const id = `custom-${Date.now()}`;
+                            const newItem: RibbonPreset = { key:id, label:"새 리본", width:38, length:400, laceMm:5, topMm:80, bottomMm:50, bracketPercent:70, scaleXPercent:100, scaleYPercent:100, marginMm:53, startXmm:0, startYmm:0 };
+                            const next=[...presets, newItem];
+                            savePresets(next);
+                        }}>리본 추가</button>
+                        <div className="flex items-center gap-2">
+                            <button className="input-bevel px-3 py-2" onClick={()=>{ savePresets(defaultPresets); applyPreset(defaultPresets[0].key); }}>기본값 복원</button>
+                            <button className="btn-blue px-3 py-2" onClick={()=> setPresetOpen(false)}>완료</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )}
+        {envOpen && (
+            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+                <div className="panel rounded-lg w-full max-w-2xl p-4 bg-white">
+                    <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-base font-semibold">환경설정</h3>
+                        <button className="input-bevel px-2 py-1" onClick={() => setEnvOpen(false)}>닫기</button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <div className="font-medium mb-2">기본 프리셋</div>
+                            <select value={envDefaultPreset} onChange={(e) => setEnvDefaultPreset(e.target.value)} className="input-bevel w-full px-3 py-2 text-sm">
+                                {presets.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <div className="font-medium mb-2">출력 보정 기본값</div>
+                            <div className="grid grid-cols-3 gap-2 text-sm">
+                                <label className="block">
+                                    <span className="block text-gray-600">스케일(%)</span>
+                                    <input type="number" value={envPrintScale} onChange={(e) => setEnvPrintScale(Number(e.target.value) || 100)} className="input-bevel w-full px-3 py-2" />
+                                </label>
+                                <label className="block">
+                                    <span className="block text-gray-600">X(mm)</span>
+                                    <input type="number" value={envOffsetXmm} onChange={(e) => setEnvOffsetXmm(Number(e.target.value) || 0)} className="input-bevel w-full px-3 py-2" />
+                                </label>
+                                <label className="block">
+                                    <span className="block text-gray-600">Y(mm)</span>
+                                    <input type="number" value={envOffsetYmm} onChange={(e) => setEnvOffsetYmm(Number(e.target.value) || 0)} className="input-bevel w-full px-3 py-2" />
+                                </label>
+                            </div>
+                        </div>
+                        <div className="col-span-2">
+                            <div className="font-medium mb-2">기본 글꼴</div>
+                            <div className="grid grid-cols-1 gap-3 text-sm">
+                                <div className="grid grid-cols-4 gap-2 items-end">
+                                    <label className="block col-span-2">
+                                        <span className="block text-gray-600">소스</span>
+                                        <select value={envFontSource} onChange={(e) => setEnvFontSource(e.target.value as "system" | "web")} className="input-bevel w-full px-3 py-2">
+                                            <option value="system">시스템 폰트(Windows)</option>
+                                            <option value="web">웹 폰트(URL)</option>
+                                        </select>
+                                    </label>
+                                    <label className="block">
+                                        <span className="block text-gray-600">글자 크기(px)</span>
+                                        <input type="number" value={baseFontSizePx} onChange={(e) => setBaseFontSizePx(Number(e.target.value) || 12)} className="input-bevel w-full px-3 py-2" min={8} max={200} />
+                                    </label>
+                                </div>
+                                {envFontSource === 'system' ? (
+                                    <div className="grid grid-cols-3 gap-2">
+                                        <label className="block col-span-2">
+                                            <span className="block text-gray-600">시스템 글꼴</span>
+                                            <select value={envSystemFont} onChange={(e) => { setEnvSystemFont(e.target.value); setBaseFontFamily(e.target.value); }} className="input-bevel w-full px-3 py-2">
+                                                {[...windowsFontOptions, ...koreanFontOptions].map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
+                                            </select>
+                                        </label>
+                                        <div className="text-xs text-gray-500">PC에 설치된 글꼴명이면 브라우저가 사용합니다.</div>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-2">
+                                        <div className="grid grid-cols-3 gap-2 items-end">
+                                            <label className="block col-span-2">
+                                                <span className="block text-gray-600">웹 폰트 CSS URL</span>
+                                                <input value={envWebFontUrl} onChange={(e) => setEnvWebFontUrl(e.target.value)} placeholder="https://fonts.googleapis.com/css2?..." className="input-bevel w-full px-3 py-2" />
+                                            </label>
+                                            <label className="block">
+                                                <span className="block text-gray-600">폰트 패밀리명</span>
+                                                <input value={envWebFontFamily} onChange={(e) => setEnvWebFontFamily(e.target.value)} placeholder="예: LXGW WenKai TC" className="input-bevel w-full px-3 py-2" />
+                                            </label>
+                                        </div>
+                                        <div>
+                                            <button className="btn-blue px-3 py-2" onClick={() => {
+                                                if (!envWebFontUrl || !envWebFontFamily) return;
+                                                const item = { id: `wf-${Date.now()}`, url: envWebFontUrl, family: envWebFontFamily } as WebFontItem;
+                                                const next = [...envWebFonts, item];
+                                                setEnvWebFonts(next);
+                                                injectAllWebFonts(next);
+                                                setBaseFontFamily(envWebFontFamily);
+                                                setEnvWebFontUrl(""); setEnvWebFontFamily("");
+                                            }}>추가</button>
+                                        </div>
+                                        {envWebFonts.length > 0 && (
+                                            <div className="rounded border p-2">
+                                                <div className="text-xs text-gray-600 mb-1">등록된 웹 폰트</div>
+                                                <ul className="space-y-1 text-sm">
+                                                    {envWebFonts.map((f) => (
+                                                        <li key={f.id} className="flex items-center justify-between gap-2">
+                                                            <span className="truncate">{f.family}</span>
+                                                            <div className="flex items-center gap-2">
+                                                                <button className="input-bevel px-2 py-1" onClick={() => setBaseFontFamily(f.family)}>기본으로</button>
+                                                                <button className="input-bevel px-2 py-1" onClick={() => {
+                                                                    const next = envWebFonts.filter(x => x.id !== f.id);
+                                                                    setEnvWebFonts(next);
+                                                                    injectAllWebFonts(next);
+                                                                }}>삭제</button>
+                                                            </div>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        )}
+                                        <div className="grid grid-cols-1 gap-2">
+                                            <label className="block">
+                                                <span className="block text-gray-600">직접 CSS(@font-face) 붙여넣기</span>
+                                                <textarea value={envWebFontCss} onChange={(e)=>setEnvWebFontCss(e.target.value)} className="input-bevel w-full px-3 py-2 text-xs" rows={5} placeholder="@font-face {\n  font-family: 'YourFamily';\n  src: url('https://.../your.woff2') format('woff2');\n  font-weight: 400; font-style: normal;\n}"></textarea>
+                                            </label>
+                                            <div className="flex items-center gap-2">
+                                                <button className="input-bevel px-3 py-2" onClick={() => {
+                                                    if (!envWebFontCss.trim()) return;
+                                                    const fams = Array.from(new Set((envWebFontCss.match(/font-family\s*:\s*['\"]([^'\"]+)['\"]/gi) || []).map(s => s.replace(/.*font-family\s*:\s*['\"]/i,'').replace(/['\"];?/,'').trim())));
+                                                    const item = { id: `wfc-${Date.now()}`, css: envWebFontCss, families: fams };
+                                                    const next = [...envWebFontCssList, item];
+                                                    setEnvWebFontCssList(next);
+                                                    const id = `dynamic-webfont-css-${next.length-1}`;
+                                                    let el = document.getElementById(id) as HTMLStyleElement | null;
+                                                    if (!el) { el = document.createElement('style'); el.id = id; document.head.appendChild(el); }
+                                                    el.textContent = envWebFontCss;
+                                                    setFontLoadTick(t=>t+1);
+                                                    setEnvWebFontCss('');
+                                                }}>CSS 추가</button>
+                                            </div>
+                                            {envWebFontCssList.length>0 ? (
+                                                <div className="rounded border p-2">
+                                                    <div className="text-xs text-gray-600 mb-1">등록된 CSS 폰트</div>
+                                                    <ul className="space-y-1 text-xs">
+                                                        {envWebFontCssList.map((c, idx) => (
+                                                            <li key={c.id} className="flex items-center justify-between gap-2">
+                                                                <span className="truncate">{c.families.join(', ') || 'Custom CSS'}</span>
+                                                                <button className="input-bevel px-2 py-1" onClick={()=>{
+                                                                    const next = envWebFontCssList.filter(x=>x.id!==c.id);
+                                                                    setEnvWebFontCssList(next);
+                                                                    const node = document.getElementById(`dynamic-webfont-css-${idx}`);
+                                                                    node?.parentElement?.removeChild(node);
+                                                                    setFontLoadTick(t=>t+1);
+                                                                }}>삭제</button>
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                </div>
+                                            ) : null}
+                                        </div>
+                                        <div className="text-xs text-gray-500">여러 URL/패밀리를 등록해 관리할 수 있습니다. 저장 시 함께 보관됩니다.</div>
+                                        <div className="text-xs text-gray-500">전역 글꼴/크기 및 스크립트별 글꼴은 좌/우 리본 모두에 적용됩니다.</div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                    <div className="flex items-center justify-end gap-2 mt-4">
+                        <button className="input-bevel px-3 py-2" onClick={() => setEnvOpen(false)}>취소</button>
+                        <button className="btn-blue px-3 py-2" onClick={saveEnvironment}>저장</button>
+                    </div>
+                </div>
+            </div>
+        )}
     </div>
   );
 }
+
+
