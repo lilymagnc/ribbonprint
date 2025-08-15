@@ -69,8 +69,8 @@ export default function Home() {
 		bottomMarginMm: 20,
 		autoFit: true,
 		sidePaddingMm: 2,
-		koreanFont: "Noto Sans KR",
-		cjkFont: "Malgun Gothic",
+		koreanFont: "ChosunGs",
+		cjkFont: "ChosunGs",
 		latinFont: "Arial",
         verticalDirection: "top-down",
         horizontalAlign: "center",
@@ -93,8 +93,8 @@ export default function Home() {
 		bottomMarginMm: 20,
 		autoFit: true,
 		sidePaddingMm: 2,
-		koreanFont: "Noto Sans KR",
-		cjkFont: "Malgun Gothic",
+		koreanFont: "ChosunGs",
+		cjkFont: "ChosunGs",
 		latinFont: "Arial",
         verticalDirection: "top-down",
         horizontalAlign: "center",
@@ -171,40 +171,90 @@ export default function Home() {
     const [envWebFontUrl, setEnvWebFontUrl] = useState<string>("");
     const [envWebFontFamily, setEnvWebFontFamily] = useState<string>("");
     type WebFontItem = { id: string; url: string; family: string };
-    const [envWebFonts, setEnvWebFonts] = useState<WebFontItem[]>([]);
+    const [envWebFonts, setEnvWebFonts] = useState<WebFontItem[]>([
+        { id: "noto-sans-kr", url: "https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap", family: "Noto Sans KR" },
+        { id: "nanum-gothic", url: "https://fonts.googleapis.com/css2?family=Nanum+Gothic:wght@400;700&display=swap", family: "Nanum Gothic" },
+        { id: "nanum-myeongjo", url: "https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@400;700&display=swap", family: "Nanum Myeongjo" },
+        { id: "gowun-dodum", url: "https://fonts.googleapis.com/css2?family=Gowun+Dodum&display=swap", family: "Gowun Dodum" },
+        { id: "do-hyeon", url: "https://fonts.googleapis.com/css2?family=Do+Hyeon&display=swap", family: "Do Hyeon" },
+        { id: "noto-serif-kr", url: "https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;700&display=swap", family: "Noto Serif KR" },
+        { id: "black-han-sans", url: "https://fonts.googleapis.com/css2?family=Black+Han+Sans&display=swap", family: "Black Han Sans" },
+        { id: "east-sea-dokdo", url: "https://fonts.googleapis.com/css2?family=East+Sea+Dokdo&display=swap", family: "East Sea Dokdo" },
+        { id: "jua", url: "https://fonts.googleapis.com/css2?family=Jua&display=swap", family: "Jua" },
+        { id: "gamja-flower", url: "https://fonts.googleapis.com/css2?family=Gamja+Flower&display=swap", family: "Gamja Flower" }
+    ]);
     // Custom raw CSS (@font-face) entries
     type WebFontCssItem = { id: string; css: string; families: string[] };
     const [envWebFontCss, setEnvWebFontCss] = useState<string>("");
-    const [envWebFontCssList, setEnvWebFontCssList] = useState<WebFontCssItem[]>([]);
+    const [envWebFontCssList, setEnvWebFontCssList] = useState<WebFontCssItem[]>([
+        {
+            id: "chosun-gs",
+            css: `@font-face {
+                font-family: 'ChosunGs';
+                src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_20-04@1.0/ChosunGs.woff') format('woff');
+                font-weight: normal;
+                font-style: normal;
+                font-display: swap;
+            }`,
+            families: ["ChosunGs"]
+        },
+        {
+            id: "korean-calligraphy",
+            css: `@font-face {
+                font-family: 'Yeon Sung';
+                src: url('https://fonts.googleapis.com/css2?family=Yeon+Sung&display=swap');
+                font-weight: 400;
+                font-style: normal;
+                font-display: swap;
+            }`,
+            families: ["Yeon Sung"]
+        }
+    ]);
     const [fontLoadTick, setFontLoadTick] = useState<number>(0);
 	const [envPrintScale, setEnvPrintScale] = useState<number>(100);
 	const [envOffsetXmm, setEnvOffsetXmm] = useState<number>(0);
 	const [envOffsetYmm, setEnvOffsetYmm] = useState<number>(0);
     // global base font
     const koreanFontOptions = [
-        { key: 'Noto Sans KR', label: 'Noto Sans KR' },
+        { key: 'Noto Sans KR', label: 'Noto Sans KR (기본 고딕)' },
         { key: 'Nanum Gothic', label: '나눔고딕 (Nanum Gothic)' },
         { key: 'Nanum Myeongjo', label: '나눔명조 (Nanum Myeongjo)' },
         { key: 'Gowun Dodum', label: '고운돋움 (Gowun Dodum)' },
         { key: 'Do Hyeon', label: '도현 (Do Hyeon)' },
+        { key: 'Noto Serif KR', label: 'Noto Serif KR (명조체)' },
+        { key: 'Black Han Sans', label: 'Black Han Sans (두꺼운 고딕)' },
+        { key: 'Jua', label: 'Jua (둥근 고딕)' },
+        { key: 'East Sea Dokdo', label: 'East Sea Dokdo (손글씨)' },
+        { key: 'Gamja Flower', label: 'Gamja Flower (귀여운 손글씨)' },
+        { key: 'ChosunGs', label: '조선일보명조 (ChosunGs)' },
+        { key: 'Yeon Sung', label: '연성 (서예체)' },
     ];
     const windowsFontOptions = [
         { key: 'Malgun Gothic', label: '맑은 고딕 (Malgun Gothic)' },
         { key: 'Gulim', label: '굴림 (Gulim)' },
         { key: 'Dotum', label: '돋움 (Dotum)' },
         { key: 'Batang', label: '바탕 (Batang)' },
+        { key: 'Gungsuh', label: '궁서 (Gungsuh)' },
+        { key: 'Microsoft YaHei', label: 'Microsoft YaHei (중국어)' },
+        { key: 'SimSun', label: 'SimSun (중국어 명조)' },
+        { key: 'MS Gothic', label: 'MS Gothic (일본어)' },
+        { key: 'Yu Gothic', label: 'Yu Gothic (일본어 고딕)' },
     ];
     const latinFontOptions = [
-        { key: 'Arial', label: 'Arial' },
-        { key: 'Times New Roman', label: 'Times New Roman' },
-        { key: 'Courier New', label: 'Courier New' },
-        { key: 'Georgia', label: 'Georgia' },
-        { key: 'Verdana', label: 'Verdana' },
-        { key: 'Tahoma', label: 'Tahoma' },
-        { key: 'Trebuchet MS', label: 'Trebuchet MS' },
-        { key: 'Inter', label: 'Inter' },
-        { key: 'Roboto', label: 'Roboto' },
-        { key: 'Noto Sans', label: 'Noto Sans' },
+        { key: 'Arial', label: 'Arial (기본 산세리프)' },
+        { key: 'Times New Roman', label: 'Times New Roman (세리프)' },
+        { key: 'Courier New', label: 'Courier New (모노스페이스)' },
+        { key: 'Georgia', label: 'Georgia (세리프)' },
+        { key: 'Verdana', label: 'Verdana (웹 고딕)' },
+        { key: 'Tahoma', label: 'Tahoma (시스템 고딕)' },
+        { key: 'Trebuchet MS', label: 'Trebuchet MS (둥근 고딕)' },
+        { key: 'Inter', label: 'Inter (모던 고딕)' },
+        { key: 'Roboto', label: 'Roboto (구글 고딕)' },
+        { key: 'Noto Sans', label: 'Noto Sans (국제 고딕)' },
+        { key: 'Helvetica', label: 'Helvetica (클래식)' },
+        { key: 'Calibri', label: 'Calibri (오피스)' },
+        { key: 'Segoe UI', label: 'Segoe UI (윈도우)' },
+        { key: 'San Francisco', label: 'San Francisco (맥OS)' },
     ];
     // Experimental: Local Font Access (Chromium) — enumerate installed system fonts with permission
     const [systemFontList, setSystemFontList] = useState<string[]>([]);
@@ -237,8 +287,8 @@ export default function Home() {
     const [baseFontFamily, setBaseFontFamily] = useState<string>(koreanFontOptions[0].key);
     const [baseFontSizePx, setBaseFontSizePx] = useState<number>(32);
     // Global per-script font selection
-    const [fontKorean, setFontKorean] = useState<string>("Noto Sans KR");
-    const [fontCjk, setFontCjk] = useState<string>("Malgun Gothic");
+    const [fontKorean, setFontKorean] = useState<string>("ChosunGs");
+    const [fontCjk, setFontCjk] = useState<string>("ChosunGs");
     const [fontLatin, setFontLatin] = useState<string>("Arial");
 
     const leftCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -1048,6 +1098,26 @@ GM[이사]홍길동
         }
     }, []);
     useEffect(() => { pushHistory(); }, [ribbonWidthMm, ribbonLengthMm, backgroundColor, applyBoth, leftSettings, rightSettings]);
+    
+    // Auto-save environment when font settings change
+    useEffect(() => {
+        const env = {
+            defaultPreset: envDefaultPreset,
+            fontSource: envFontSource,
+            systemFont: envSystemFont,
+            webFontUrl: envWebFontUrl,
+            webFontFamily: envWebFontFamily,
+            webFonts: envWebFonts,
+            webFontCssList: envWebFontCssList,
+            printScale: envPrintScale,
+            offsetXmm: envOffsetXmm,
+            offsetYmm: envOffsetYmm,
+            fontKorean,
+            fontCjk,
+            fontLatin,
+        };
+        localStorage.setItem("ribbonEnvV1", JSON.stringify(env));
+    }, [envFontSource, envSystemFont, envWebFonts, envWebFontCssList, fontKorean, fontCjk, fontLatin, envDefaultPreset, envPrintScale, envOffsetXmm, envOffsetYmm]);
     // keep scale input mirrors in sync when state changes elsewhere
     useEffect(() => {
         setLeftScaleXStr(String(Math.round(leftSettings.scaleX * 100)));
@@ -1126,9 +1196,10 @@ GM[이사]홍길동
                     setEnvWebFonts(wf);
                 } else if ((env.webFontUrl ?? "") && (env.webFontFamily ?? "")) {
                     setEnvWebFonts([{ id: `wf-${Date.now()}`, url: env.webFontUrl, family: env.webFontFamily }]);
-                }
+                } // Keep default initial values if no saved fonts
                 const wfc: WebFontCssItem[] | undefined = env.webFontCssList;
                 if (Array.isArray(wfc) && wfc.length > 0) setEnvWebFontCssList(wfc);
+                // Keep default initial values if no saved CSS fonts
 				setEnvPrintScale(env.printScale ?? envPrintScale);
 				setEnvOffsetXmm(env.offsetXmm ?? envOffsetXmm);
 				setEnvOffsetYmm(env.offsetYmm ?? envOffsetYmm);
