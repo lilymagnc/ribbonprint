@@ -87,7 +87,7 @@ export default function Home() {
 		isBold: false,
 		isItalic: false,
 		color: "#111111",
-		content: "보내는이 리본",
+		content: "보내는이\n[회사명]",
 		charSpacingMm: 5,
 		topMarginMm: 20,
 		bottomMarginMm: 20,
@@ -290,6 +290,48 @@ export default function Home() {
     const [fontKorean, setFontKorean] = useState<string>("ChosunGs");
     const [fontCjk, setFontCjk] = useState<string>("ChosunGs");
     const [fontLatin, setFontLatin] = useState<string>("Arial");
+
+    // Ribbon Print Settings
+    const [printDialogOpen, setPrintDialogOpen] = useState<boolean>(false);
+    const [printMode, setPrintMode] = useState<'left' | 'right' | 'both'>('both');
+    const [selectedPrinter, setSelectedPrinter] = useState<string>('');
+    const [printCopies, setPrintCopies] = useState<number>(1);
+    const [isRollRibbon, setIsRollRibbon] = useState<boolean>(true);
+    const [showCutLine, setShowCutLine] = useState<boolean>(false); // 좌우 구분선
+    const [printSpeed, setPrintSpeed] = useState<'normal' | 'slow'>('normal');
+    const [xOffset, setXOffset] = useState<number>(0);
+    const [postFeed, setPostFeed] = useState<number>(100); // 롤리본 여분 배출량
+    
+    // Windows installed printers
+    const [installedPrinters, setInstalledPrinters] = useState<string[]>([]);
+    const [loadingPrinters, setLoadingPrinters] = useState<boolean>(false);
+    
+    // Get Windows installed printers
+    const getInstalledPrinters = async () => {
+        setLoadingPrinters(true);
+        try {
+            // 방법 3: 폴백 - 일반적인 프린터 목록
+            const fallbackPrinters = [
+                '기본 프린터',
+                'Microsoft Print to PDF',
+                'Microsoft XPS Document Writer',
+                'Fax',
+                '사용자 정의 프린터'
+            ];
+            
+            setInstalledPrinters(fallbackPrinters);
+            if (fallbackPrinters.length > 0 && !selectedPrinter) {
+                setSelectedPrinter(fallbackPrinters[0]);
+            }
+            
+        } catch (error) {
+            console.error('프린터 목록 가져오기 실패:', error);
+            setInstalledPrinters(['기본 프린터']);
+            setSelectedPrinter('기본 프린터');
+        } finally {
+            setLoadingPrinters(false);
+        }
+    };
 
     const leftCanvasRef = useRef<HTMLCanvasElement | null>(null);
     const rightCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -902,19 +944,20 @@ GM[이사]홍길동
                     const t = streamTokens[k];
                     const h = heightsS[k];
                     const gY = (baseGlyphScaleY * (isParenSingle(t.ch) ? 1 : t.factor) * addScaleS);
+                    const gX = baseGlyphScaleX * (isParenSingle(t.ch) ? 1 : t.factor); // bracket factor도 가로에 적용
                     ctx.save();
                     if (isParenSingle(t.ch)) {
 						const baseChar = t.ch![1];
 						ctx.font = `${fontStyle} ${fontWeight} ${usedFontSize}px ${fontChainForChar(baseChar)}`;
 						const tokenWidth = ctx.measureText(t.ch!).width;
                         const tokenScaleX = Math.min(1, innerWidth / Math.max(1, tokenWidth));
-                        ctx.scale(baseGlyphScaleX * tokenScaleX, gY);
-						ctx.fillText(t.ch!, x / (baseGlyphScaleX * tokenScaleX), yDevS / gY);
+                        ctx.scale(gX * tokenScaleX, gY);
+						ctx.fillText(t.ch!, x / (gX * tokenScaleX), yDevS / gY);
                     } else {
 						const baseChar = t.ch || ' ';
 						ctx.font = `${fontStyle} ${fontWeight} ${usedFontSize}px ${fontChainForChar(baseChar)}`;
-						ctx.scale(baseGlyphScaleX, gY);
-						if (t.ch) ctx.fillText(t.ch, x / baseGlyphScaleX, yDevS / gY);
+						ctx.scale(gX, gY);
+						if (t.ch) ctx.fillText(t.ch, x / gX, yDevS / gY);
                     }
                     ctx.restore();
                     yDevS += h + spacingS;
@@ -934,9 +977,11 @@ GM[이사]홍길동
             for (const t of [...tokens].reverse()) {
                 const h = tokenHeights[n - 1 - idx];
                 let gY = (baseGlyphScaleY * t.factor * additionalScale);
+                let gX = baseGlyphScaleX * t.factor; // bracket factor도 가로에 적용
                 ctx.save();
 					if (isParenSingle(t.ch)) {
                     gY = (baseGlyphScaleY * 1 * additionalScale);
+                    gX = baseGlyphScaleX; // parenthesis는 bracket factor 적용 안함
 						const baseChar = t.ch![1];
 						ctx.font = `${fontStyle} ${fontWeight} ${usedFontSize}px ${fontChainForChar(baseChar)}`;
 						const tokenWidth = ctx.measureText(t.ch!).width;
@@ -944,15 +989,15 @@ GM[이사]홍길동
                     const tokenScaleX = Math.min(1, innerWidth / Math.max(1, tokenWidth));
                     const baseX = t.col === 'left' ? ribbonX + sidePaddingPx : t.col === 'right' ? ribbonX + ribbonWidthPx - sidePaddingPx : anchorX;
                     ctx.textAlign = t.col === 'left' ? 'left' : t.col === 'right' ? 'right' : ctx.textAlign;
-                    ctx.scale(baseGlyphScaleX * tokenScaleX, gY);
-                    ctx.fillText(t.ch!, baseX / (baseGlyphScaleX * tokenScaleX), yDev / gY);
+                    ctx.scale(gX * tokenScaleX, gY);
+                    ctx.fillText(t.ch!, baseX / (gX * tokenScaleX), yDev / gY);
                 } else {
 						const baseChar = t.ch || ' ';
 						ctx.font = `${fontStyle} ${fontWeight} ${usedFontSize}px ${fontChainForChar(baseChar)}`;
-						ctx.scale(baseGlyphScaleX, gY);
+						ctx.scale(gX, gY);
                     const baseX = t.col === 'left' ? ribbonX + sidePaddingPx : t.col === 'right' ? ribbonX + ribbonWidthPx - sidePaddingPx : anchorX;
                     ctx.textAlign = t.col === 'left' ? 'left' : t.col === 'right' ? 'right' : ctx.textAlign;
-                    if (t.ch) ctx.fillText(t.ch, baseX / baseGlyphScaleX, yDev / gY);
+                    if (t.ch) ctx.fillText(t.ch, baseX / gX, yDev / gY);
                 }
                 ctx.restore();
                 yDev += h + spacingDevice;
@@ -964,9 +1009,11 @@ GM[이사]홍길동
             for (const t of tokens) {
                 const h = tokenHeights[idx];
                 let gY = (baseGlyphScaleY * t.factor * additionalScale);
+                let gX = baseGlyphScaleX * t.factor; // bracket factor도 가로에 적용
                 ctx.save();
 					if (isParenSingle(t.ch)) {
                     gY = (baseGlyphScaleY * 1 * additionalScale);
+                    gX = baseGlyphScaleX; // parenthesis는 bracket factor 적용 안함
 						const baseChar = t.ch![1];
 						ctx.font = `${fontStyle} ${fontWeight} ${usedFontSize}px ${fontChainForChar(baseChar)}`;
 						const tokenWidth = ctx.measureText(t.ch!).width;
@@ -974,15 +1021,15 @@ GM[이사]홍길동
                     const tokenScaleX = Math.min(1, innerWidth / Math.max(1, tokenWidth));
                     const baseX = t.col === 'left' ? ribbonX + sidePaddingPx : t.col === 'right' ? ribbonX + ribbonWidthPx - sidePaddingPx : anchorX;
                     ctx.textAlign = t.col === 'left' ? 'left' : t.col === 'right' ? 'right' : ctx.textAlign;
-                    ctx.scale(baseGlyphScaleX * tokenScaleX, gY);
-                    ctx.fillText(t.ch!, baseX / (baseGlyphScaleX * tokenScaleX), yDev / gY);
+                    ctx.scale(gX * tokenScaleX, gY);
+                    ctx.fillText(t.ch!, baseX / (gX * tokenScaleX), yDev / gY);
                 } else {
 						const baseChar = t.ch || ' ';
 						ctx.font = `${fontStyle} ${fontWeight} ${usedFontSize}px ${fontChainForChar(baseChar)}`;
-						ctx.scale(baseGlyphScaleX, gY);
+						ctx.scale(gX, gY);
                     const baseX = t.col === 'left' ? ribbonX + sidePaddingPx : t.col === 'right' ? ribbonX + ribbonWidthPx - sidePaddingPx : anchorX;
                     ctx.textAlign = t.col === 'left' ? 'left' : t.col === 'right' ? 'right' : ctx.textAlign;
-                    if (t.ch) ctx.fillText(t.ch, baseX / baseGlyphScaleX, yDev / gY);
+                    if (t.ch) ctx.fillText(t.ch, baseX / gX, yDev / gY);
                 }
                 ctx.restore();
                 yDev += h + spacingDevice;
@@ -1256,6 +1303,454 @@ GM[이사]홍길동
 		setPrintOffsetYmm(envOffsetYmm);
 		setEnvOpen(false);
 	};
+
+    // Ribbon Print Functions
+    const generateRibbonPrintLayout = () => {
+        // 현재 작업 중인 리본 크기 그대로 사용
+        const ribbonWidth = ribbonWidthMm;
+        // 롤 리본: 작업 길이 + 배출 여분, 재단 리본: 정확히 리본 길이만큼
+        const printHeight = isRollRibbon 
+            ? ribbonLengthMm + postFeed  // 롤리본: 작업 길이 + 배출 여분
+            : ribbonLengthMm;            // 재단리본: 미리 잘라놓은 길이 그대로
+        
+        // Create print-specific canvas
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return null;
+        
+        // Set canvas size (300 DPI for print quality)
+        const dpi = 300;
+        const mmToPx = (mm: number) => (mm * dpi) / 25.4;
+        
+        canvas.width = mmToPx(ribbonWidth);
+        canvas.height = mmToPx(printHeight);
+        
+        // Background
+        ctx.fillStyle = backgroundColor;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        const centerX = canvas.width / 2;
+        const leftZoneWidth = centerX - mmToPx(5); // 5mm margin from center
+        const rightZoneWidth = centerX - mmToPx(5);
+        
+        // Draw content based on print mode
+        if (printMode === 'both' || printMode === 'left') {
+            drawRibbonText(ctx, leftSettings, 0, leftZoneWidth, canvas.height, 'left', ribbonWidth);
+        }
+        
+        if (printMode === 'both' && showCutLine) {
+            // Center dividing line (자르줄 인쇄 = 좌우 구분선)
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([10, 5]);
+            ctx.beginPath();
+            ctx.moveTo(centerX, 0);
+            ctx.lineTo(centerX, canvas.height);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+        
+        if (printMode === 'both' || printMode === 'right') {
+            const rightStartX = printMode === 'both' ? centerX + mmToPx(5) : 0;
+            const rightWidth = printMode === 'both' ? rightZoneWidth : canvas.width;
+            drawRibbonText(ctx, rightSettings, rightStartX, rightWidth, canvas.height, 'right', ribbonWidth);
+        }
+        
+        // 롤리본 배출 영역 표시
+        if (isRollRibbon && postFeed > 0) {
+            const contentEndY = mmToPx(ribbonLengthMm);
+            const feedAreaHeight = mmToPx(postFeed);
+            
+            // 배출 영역 배경 (연한 회색)
+            ctx.fillStyle = '#f0f0f0';
+            ctx.fillRect(0, contentEndY, canvas.width, feedAreaHeight);
+            
+            // 배출 영역 경계선
+            ctx.strokeStyle = '#cccccc';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([5, 5]);
+            ctx.beginPath();
+            ctx.moveTo(0, contentEndY);
+            ctx.lineTo(canvas.width, contentEndY);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            
+            // 배출 영역 라벨
+            ctx.fillStyle = '#666666';
+            ctx.font = '12px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(`배출 여분 ${postFeed}mm`, canvas.width / 2, contentEndY + feedAreaHeight / 2);
+        }
+        
+        return canvas;
+    };
+    
+    const drawRibbonText = (
+        ctx: CanvasRenderingContext2D, 
+        settings: RibbonTextSettings, 
+        startX: number, 
+        width: number, 
+        height: number, 
+        side: 'left' | 'right',
+        ribbonWidthMm: number
+    ) => {
+        const content = settings.content;
+        if (!content || !content.trim()) return;
+        
+        // Print DPI scaling factor (300 DPI vs 96 DPI screen)
+        const dpiScale = 300 / 96;
+        
+        // 폰트 설정
+        const usedFontSize = Math.floor(settings.fontSizePx * dpiScale);
+        const fontWeight = settings.isBold ? '700' : '400';
+        const fontStyle = settings.isItalic ? 'italic' : 'normal';
+        
+        // Helper functions from preview
+        const fontChainForChar = (char: string) => {
+            const code = char.charCodeAt(0);
+            if ((code >= 0x1100 && code <= 0x11FF) || 
+                (code >= 0x3130 && code <= 0x318F) || 
+                (code >= 0xAC00 && code <= 0xD7AF)) {
+                return `"${settings.koreanFont || fontKorean}", "${settings.cjkFont || fontCjk}", "${settings.latinFont || fontLatin}", ${baseFontFamily}, sans-serif`;
+            }
+            if ((code >= 0x4E00 && code <= 0x9FFF) || 
+                (code >= 0x3400 && code <= 0x4DBF)) {
+                return `"${settings.cjkFont || fontCjk}", "${settings.koreanFont || fontKorean}", "${settings.latinFont || fontLatin}", ${baseFontFamily}, sans-serif`;
+            }
+            return `"${settings.latinFont || fontLatin}", "${settings.koreanFont || fontKorean}", "${settings.cjkFont || fontCjk}", ${baseFontFamily}, sans-serif`;
+        };
+        
+        const isParenSingle = (text: string) => {
+            return text && text.length >= 3 && text[0] === '(' && text[text.length - 1] === ')';
+        };
+        
+        ctx.save();
+        ctx.fillStyle = settings.color;
+        
+        // Scale all measurements
+        const ribbonWidthPx = width;
+        const ribbonHeightPx = height;
+        const sidePaddingPx = settings.sidePaddingMm * dpiScale * 3.7795275591;
+        const topMarginPx = settings.topMarginMm * dpiScale * 3.7795275591;
+        const bottomMarginPx = settings.bottomMarginMm * dpiScale * 3.7795275591;
+        const charSpacingPx = settings.charSpacingMm * dpiScale * 3.7795275591;
+        
+        const ribbonX = startX;
+        const ribbonY = 0;
+        
+        // Calculate available area
+        const availableHeight = ribbonHeightPx - topMarginPx - bottomMarginPx;
+        const targetInnerWidth = ribbonWidthPx - 2 * sidePaddingPx;
+        
+        // Split content by newlines
+        const lines = content.split('\n').filter(line => line.trim());
+        
+        // For print mode direction handling
+        let processedLines = [...lines];
+        if (printMode === 'both') {
+            if (side === 'left') {
+                // Left side: reverse order (bottom to top) for folding alignment
+                processedLines = [...lines].reverse();
+            }
+            // Right side: keep normal order (top to bottom)
+        }
+        
+        // Process each line
+        const lineHeight = usedFontSize * 1.2;
+        const totalTextHeight = processedLines.length * lineHeight;
+        const yStartDevice = ribbonY + topMarginPx + (availableHeight - totalTextHeight) / 2;
+        
+        let currentY = yStartDevice;
+        
+        for (const line of processedLines) {
+            if (!line.trim()) {
+                currentY += lineHeight;
+                continue;
+            }
+            
+            // Check for two-column layout (/) 
+            const slashPos = line.indexOf('/');
+            
+            if (slashPos >= 0) {
+                // Two-column layout
+                const drawStream = (text: string, x: number, align: CanvasTextAlign, innerWidth: number) => {
+                    const streamTokens: { ch: string; factor: number }[] = [];
+                    let i = 0;
+                    while (i < text.length) {
+                        if (text[i] === '[') {
+                            const closeIndex = text.indexOf(']', i);
+                            if (closeIndex > i) {
+                                const bracketContent = text.slice(i + 1, closeIndex);
+                                for (const ch of bracketContent) {
+                                    streamTokens.push({ ch, factor: settings.bracketScale || 0.5 });
+                                }
+                                i = closeIndex + 1;
+                            } else {
+                                streamTokens.push({ ch: text[i], factor: 1 });
+                                i++;
+                            }
+                        } else {
+                            streamTokens.push({ ch: text[i], factor: 1 });
+                            i++;
+                        }
+                    }
+                    
+                    if (streamTokens.length === 0) return;
+                    
+                    // Calculate scaling
+                    const baseGlyphScaleX = settings.scaleX;
+                    const baseGlyphScaleY = settings.scaleY;
+                    const charHeight = usedFontSize;
+                    const spacingS = charSpacingPx;
+                    
+                    const sumBaseS = streamTokens.reduce((sum, t) => {
+                        return sum + (isParenSingle(t.ch) ? charHeight : charHeight * t.factor);
+                    }, 0);
+                    const totalS0 = sumBaseS + (streamTokens.length - 1) * spacingS;
+                    const addScaleS = totalS0 > availableHeight && sumBaseS > 0 ? Math.max(0.05, availableHeight / sumBaseS) : 1;
+                    
+                    const heightsS = streamTokens.map(t => (isParenSingle(t.ch) ? charHeight : charHeight * t.factor) * baseGlyphScaleY * addScaleS);
+                    let yDevS = currentY;
+                    
+                    ctx.textAlign = align;
+                    
+                    for (let k = 0; k < streamTokens.length; k++) {
+                        const t = streamTokens[k];
+                        const h = heightsS[k];
+                        const gY = (baseGlyphScaleY * (isParenSingle(t.ch) ? 1 : t.factor) * addScaleS);
+                        const gX = baseGlyphScaleX * (isParenSingle(t.ch) ? 1 : t.factor);
+                        
+                        ctx.save();
+                        if (isParenSingle(t.ch)) {
+                            const baseChar = t.ch[1];
+                            ctx.font = `${fontStyle} ${fontWeight} ${usedFontSize}px ${fontChainForChar(baseChar)}`;
+                            const tokenWidth = ctx.measureText(t.ch).width;
+                            const tokenScaleX = Math.min(1, innerWidth / Math.max(1, tokenWidth));
+                            ctx.scale(gX * tokenScaleX, gY);
+                            ctx.fillText(t.ch, x / (gX * tokenScaleX), yDevS / gY);
+                        } else {
+                            const baseChar = t.ch || ' ';
+                            ctx.font = `${fontStyle} ${fontWeight} ${usedFontSize}px ${fontChainForChar(baseChar)}`;
+                            ctx.scale(gX, gY);
+                            if (t.ch) ctx.fillText(t.ch, x / gX, yDevS / gY);
+                        }
+                        ctx.restore();
+                        yDevS += h + spacingS;
+                    }
+                };
+                
+                const innerW = Math.max(1, (targetInnerWidth / 2) - 4);
+                const leftText = line.slice(0, slashPos);
+                const rightText = line.slice(slashPos + 1);
+                drawStream(leftText, ribbonX + sidePaddingPx, 'left', innerW);
+                drawStream(rightText, ribbonX + ribbonWidthPx - sidePaddingPx, 'right', innerW);
+            } else {
+                // Single-column layout - process with bracket scaling
+                const tokens: { ch: string; factor: number }[] = [];
+                let i = 0;
+                while (i < line.length) {
+                    if (line[i] === '[') {
+                        const closeIndex = line.indexOf(']', i);
+                        if (closeIndex > i) {
+                            const bracketContent = line.slice(i + 1, closeIndex);
+                            for (const ch of bracketContent) {
+                                tokens.push({ ch, factor: settings.bracketScale || 0.5 });
+                            }
+                            i = closeIndex + 1;
+                        } else {
+                            tokens.push({ ch: line[i], factor: 1 });
+                            i++;
+                        }
+                    } else {
+                        tokens.push({ ch: line[i], factor: 1 });
+                        i++;
+                    }
+                }
+                
+                if (tokens.length > 0) {
+                    // Calculate scaling
+                    const baseGlyphScaleX = settings.scaleX;
+                    const baseGlyphScaleY = settings.scaleY;
+                    const charHeight = usedFontSize;
+                    const spacingS = charSpacingPx;
+                    
+                    const sumBaseS = tokens.reduce((sum, t) => {
+                        return sum + (isParenSingle(t.ch) ? charHeight : charHeight * t.factor);
+                    }, 0);
+                    const totalS0 = sumBaseS + (tokens.length - 1) * spacingS;
+                    const addScaleS = totalS0 > availableHeight && sumBaseS > 0 ? Math.max(0.05, availableHeight / sumBaseS) : 1;
+                    
+                    const heightsS = tokens.map(t => (isParenSingle(t.ch) ? charHeight : charHeight * t.factor) * baseGlyphScaleY * addScaleS);
+                    let yDevS = currentY;
+                    
+                    ctx.textAlign = settings.horizontalAlign === 'left' ? 'left' : 
+                                   settings.horizontalAlign === 'right' ? 'right' : 'center';
+                    
+                    const alignX = settings.horizontalAlign === 'left' ? ribbonX + sidePaddingPx :
+                                  settings.horizontalAlign === 'right' ? ribbonX + ribbonWidthPx - sidePaddingPx :
+                                  ribbonX + ribbonWidthPx / 2;
+                    
+                    for (let k = 0; k < tokens.length; k++) {
+                        const t = tokens[k];
+                        const h = heightsS[k];
+                        const gY = (baseGlyphScaleY * (isParenSingle(t.ch) ? 1 : t.factor) * addScaleS);
+                        const gX = baseGlyphScaleX * (isParenSingle(t.ch) ? 1 : t.factor);
+                        
+                        ctx.save();
+                        if (isParenSingle(t.ch)) {
+                            const baseChar = t.ch[1];
+                            ctx.font = `${fontStyle} ${fontWeight} ${usedFontSize}px ${fontChainForChar(baseChar)}`;
+                            const tokenWidth = ctx.measureText(t.ch).width;
+                            const tokenScaleX = Math.min(1, targetInnerWidth / Math.max(1, tokenWidth));
+                            ctx.scale(gX * tokenScaleX, gY);
+                            ctx.fillText(t.ch, alignX / (gX * tokenScaleX), yDevS / gY);
+                        } else {
+                            const baseChar = t.ch || ' ';
+                            ctx.font = `${fontStyle} ${fontWeight} ${usedFontSize}px ${fontChainForChar(baseChar)}`;
+                            ctx.scale(gX, gY);
+                            if (t.ch) ctx.fillText(t.ch, alignX / gX, yDevS / gY);
+                        }
+                        ctx.restore();
+                        yDevS += h + spacingS;
+                    }
+                }
+            }
+            
+            currentY += lineHeight;
+        }
+        
+        ctx.restore();
+    };
+    
+    const executeRibbonPrint = () => {
+        const canvas = generateRibbonPrintLayout();
+        if (!canvas) return;
+        
+        const ribbonWidth = ribbonWidthMm;
+        const printHeight = isRollRibbon 
+            ? ribbonLengthMm + postFeed  // 롤리본: 작업 길이 + 배출 여분
+            : ribbonLengthMm;            // 재단리본: 미리 잘라놓은 길이 그대로
+        
+        // Create print window with enhanced settings
+        const printWindow = window.open('', '_blank', 'width=800,height=600');
+        if (!printWindow) {
+            alert('팝업이 차단되었습니다. 팝업을 허용해주세요.');
+            return;
+        }
+        
+        printWindow.document.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="utf-8">
+                <title>리본 프린트 - ${selectedPrinter}</title>
+                <style>
+                    @page {
+                        size: ${ribbonWidth}mm ${printHeight}mm;
+                        margin: 0mm;
+                        padding: 0mm;
+                    }
+                    * {
+                        margin: 0;
+                        padding: 0;
+                        box-sizing: border-box;
+                    }
+                    html, body {
+                        width: 100%;
+                        height: 100%;
+                        overflow: hidden;
+                    }
+                    .print-container {
+                        width: ${ribbonWidth}mm;
+                        height: ${printHeight}mm;
+                        margin: 0;
+                        padding: 0;
+                        display: block;
+                        position: relative;
+                    }
+                    .ribbon-image {
+                        width: 100%;
+                        height: 100%;
+                        object-fit: contain;
+                        image-rendering: -webkit-optimize-contrast;
+                        image-rendering: crisp-edges;
+                        image-rendering: pixelated;
+                        display: block;
+                    }
+                    @media print {
+                        html, body {
+                            width: ${ribbonWidth}mm !important;
+                            height: ${printHeight}mm !important;
+                        }
+                        .print-container {
+                            break-inside: avoid;
+                            page-break-inside: avoid;
+                            page-break-before: avoid;
+                            page-break-after: avoid;
+                        }
+                        .ribbon-image {
+                            break-inside: avoid;
+                        }
+                    }
+                    @media screen {
+                        body {
+                            background: #f0f0f0;
+                            display: flex;
+                            justify-content: center;
+                            align-items: center;
+                            min-height: 100vh;
+                        }
+                        .print-container {
+                            background: white;
+                            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+                            border: 1px solid #ddd;
+                        }
+                        .print-info {
+                            position: fixed;
+                            top: 10px;
+                            left: 10px;
+                            background: rgba(0,0,0,0.8);
+                            color: white;
+                            padding: 10px;
+                            border-radius: 4px;
+                            font-family: Arial, sans-serif;
+                            font-size: 12px;
+                        }
+                    }
+                </style>
+                <script>
+                    window.addEventListener('load', function() {
+                        // 이미지 로드 완료 후 자동 프린트
+                        setTimeout(function() {
+                            window.print();
+                        }, 1000);
+                    });
+                    
+                    window.addEventListener('afterprint', function() {
+                        // 프린트 완료 후 창 닫기
+                        setTimeout(function() {
+                            window.close();
+                        }, 500);
+                    });
+                </script>
+            </head>
+            <body>
+                <div class="print-info">
+                    프린터: ${selectedPrinter}<br>
+                    크기: ${ribbonWidth}mm × ${printHeight}mm<br>
+                    모드: ${printMode === 'both' ? '양쪽' : printMode === 'left' ? '좌측' : '우측'}<br>
+                    리본: ${isRollRibbon ? '롤' : '재단'}${isRollRibbon ? ` (배출: ${postFeed}mm)` : ''}
+                </div>
+                <div class="print-container">
+                    <img class="ribbon-image" src="${canvas.toDataURL('image/png', 1.0)}" alt="Ribbon Print" />
+                </div>
+            </body>
+            </html>
+        `);
+        
+        printWindow.document.close();
+        setPrintDialogOpen(false);
+    };
 
     const clearInjectedWebFonts = () => {
         const legacy = document.getElementById('dynamic-webfont-link');
@@ -1676,6 +2171,22 @@ GM[이사]홍길동
 								</div>
 							</div>
                         </div>
+                        
+                        {/* Ribbon Print Button */}
+                        <div className="mt-4 flex justify-center">
+                            <button 
+                                onClick={() => {
+                                    setPrintDialogOpen(true);
+                                    if (installedPrinters.length === 0) {
+                                        getInstalledPrinters();
+                                    }
+                                }} 
+                                className="btn-blue px-4 py-2 rounded-lg flex items-center gap-2 text-white font-medium"
+                            >
+                                <Printer className="w-4 h-4" />
+                                리본 프린트
+                            </button>
+                        </div>
 					</div>
                 </section>
         </div>
@@ -1900,6 +2411,224 @@ GM[이사]홍길동
                     <div className="flex items-center justify-end gap-2 mt-4">
                         <button className="input-bevel px-3 py-2" onClick={() => setEnvOpen(false)}>취소</button>
                         <button className="btn-blue px-3 py-2" onClick={saveEnvironment}>저장</button>
+                    </div>
+                </div>
+            </div>
+        )}
+        
+        {/* Ribbon Print Dialog */}
+        {printDialogOpen && (
+            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+                <div className="panel rounded-lg w-full max-w-md p-6 bg-white">
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-semibold">리본 프린트 설정</h3>
+                        <button onClick={() => setPrintDialogOpen(false)} className="text-gray-500 hover:text-gray-700">✕</button>
+                    </div>
+                    
+                    <div className="space-y-4">
+                        {/* Print Mode */}
+                        <div>
+                            <label className="block text-sm font-medium mb-2">출력 모드</label>
+                            <div className="space-y-2">
+                                <label className="flex items-center">
+                                    <input 
+                                        type="radio" 
+                                        value="left" 
+                                        checked={printMode === 'left'} 
+                                        onChange={(e) => setPrintMode(e.target.value as 'left')}
+                                        className="mr-2"
+                                    />
+                                    좌측만 (경조사)
+                                </label>
+                                <label className="flex items-center">
+                                    <input 
+                                        type="radio" 
+                                        value="right" 
+                                        checked={printMode === 'right'} 
+                                        onChange={(e) => setPrintMode(e.target.value as 'right')}
+                                        className="mr-2"
+                                    />
+                                    우측만 (보내는이)
+                                </label>
+                                <label className="flex items-center">
+                                    <input 
+                                        type="radio" 
+                                        value="both" 
+                                        checked={printMode === 'both'} 
+                                        onChange={(e) => setPrintMode(e.target.value as 'both')}
+                                        className="mr-2"
+                                    />
+                                    양쪽 동시 (좌측: 아래→위, 우측: 위→아래)
+                                </label>
+                            </div>
+                        </div>
+                        
+                        {/* Installed Printers */}
+                        <div>
+                            <label className="block text-sm font-medium mb-2">설치된 프린터</label>
+                            <div className="flex gap-2">
+                                <select 
+                                    value={selectedPrinter} 
+                                    onChange={(e) => setSelectedPrinter(e.target.value)}
+                                    className="input-bevel flex-1 px-3 py-2"
+                                    disabled={loadingPrinters}
+                                >
+                                    {installedPrinters.length === 0 ? (
+                                        <option value="">프린터 목록 로딩중...</option>
+                                    ) : (
+                                        installedPrinters.map((printer) => (
+                                            <option key={printer} value={printer}>{printer}</option>
+                                        ))
+                                    )}
+                                </select>
+                                <button 
+                                    onClick={getInstalledPrinters}
+                                    disabled={loadingPrinters}
+                                    className="input-bevel px-3 py-2 text-sm"
+                                >
+                                    {loadingPrinters ? '로딩...' : '새로고침'}
+                                </button>
+                            </div>
+                        </div>
+                        
+                        {/* Ribbon Type */}
+                        <div>
+                            <label className="block text-sm font-medium mb-2">리본 타입</label>
+                            <div className="space-y-2">
+                                <label className="flex items-center">
+                                    <input 
+                                        type="radio" 
+                                        checked={isRollRibbon} 
+                                        onChange={() => setIsRollRibbon(true)}
+                                        className="mr-2"
+                                    />
+                                    롤 리본 (연속 출력)
+                                </label>
+                                <label className="flex items-center">
+                                    <input 
+                                        type="radio" 
+                                        checked={!isRollRibbon} 
+                                        onChange={() => setIsRollRibbon(false)}
+                                        className="mr-2"
+                                    />
+                                    재단 리본 (리본길이만큼 잘라서 급지)
+                                </label>
+                            </div>
+                        </div>
+                        
+                        {/* Print Copies */}
+                        <div>
+                            <label className="block text-sm font-medium mb-2">매수</label>
+                            <input 
+                                type="number" 
+                                min="1" 
+                                max="999" 
+                                value={printCopies} 
+                                onChange={(e) => setPrintCopies(parseInt(e.target.value) || 1)}
+                                className="input-bevel w-full px-3 py-2"
+                            />
+                        </div>
+                        
+                        {/* Advanced Settings */}
+                        <div className="space-y-2">
+                            <label className="flex items-center">
+                                <input 
+                                    type="checkbox" 
+                                    checked={showCutLine} 
+                                    onChange={(e) => setShowCutLine(e.target.checked)}
+                                    className="mr-2"
+                                />
+                                자르줄 인쇄 (좌우 구분선)
+                            </label>
+                        </div>
+                        
+                        {/* Print Settings */}
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium mb-1">X-OFFSET</label>
+                                <input 
+                                    type="number" 
+                                    value={xOffset} 
+                                    onChange={(e) => setXOffset(parseInt(e.target.value) || 0)}
+                                    className="input-bevel w-full px-2 py-1 text-sm"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium mb-1">
+                                    배출(mm)
+                                    {isRollRibbon && <span className="text-xs text-gray-500 block">출력 후 여분 리본 길이</span>}
+                                </label>
+                                <div className="flex items-center gap-2">
+                                    <input 
+                                        type="range"
+                                        min="0"
+                                        max="300"
+                                        step="10"
+                                        value={postFeed} 
+                                        onChange={(e) => setPostFeed(parseInt(e.target.value))}
+                                        className="flex-1"
+                                        disabled={!isRollRibbon}
+                                    />
+                                    <input 
+                                        type="number" 
+                                        min="0"
+                                        max="300"
+                                        value={postFeed} 
+                                        onChange={(e) => setPostFeed(parseInt(e.target.value) || 0)}
+                                        className="input-bevel w-16 px-2 py-1 text-sm text-center"
+                                        disabled={!isRollRibbon}
+                                    />
+                                    <span className="text-xs text-gray-500">mm</span>
+                                </div>
+                                {isRollRibbon && (
+                                    <div className="text-xs text-gray-500 mt-1">
+                                        권장: 50-150mm (잘라내기 편의용)
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                        
+                        {/* Print Speed */}
+                        <div>
+                            <label className="block text-sm font-medium mb-2">인쇄 속도</label>
+                            <select 
+                                value={printSpeed} 
+                                onChange={(e) => setPrintSpeed(e.target.value as 'normal' | 'slow')}
+                                className="input-bevel w-full px-3 py-2"
+                            >
+                                <option value="normal">보통</option>
+                                <option value="slow">느리기</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    {/* Print Setup Instructions */}
+                    <div className="bg-blue-50 p-4 rounded-lg mt-4">
+                        <h4 className="font-medium text-blue-900 mb-2">📋 프린터 설정 안내</h4>
+                        <div className="text-sm text-blue-800 space-y-1">
+                            <div><strong>1. 용지 크기:</strong> 사용자 정의 → {ribbonWidthMm}mm × {isRollRibbon ? `${ribbonLengthMm + postFeed}mm` : `${ribbonLengthMm}mm`}</div>
+                            <div><strong>2. 방향:</strong> 세로(Portrait)</div>
+                            <div><strong>3. 여백:</strong> 최소 또는 0mm</div>
+                            <div><strong>4. 배율:</strong> 100% (실제 크기)</div>
+                            <div><strong>5. 품질:</strong> 최고 품질</div>
+                            {isRollRibbon && <div><strong>6. 급지:</strong> 연속 용지/배너 모드</div>}
+                        </div>
+                    </div>
+                    
+                    <div className="flex items-center justify-end gap-2 mt-6">
+                        <button 
+                            onClick={() => setPrintDialogOpen(false)} 
+                            className="input-bevel px-4 py-2"
+                        >
+                            취소
+                        </button>
+                        <button 
+                            onClick={executeRibbonPrint} 
+                            className="btn-blue px-4 py-2 text-white"
+                            disabled={!selectedPrinter}
+                        >
+                            {selectedPrinter ? '출력하기' : '프린터를 선택하세요'}
+                        </button>
                     </div>
                 </div>
             </div>
