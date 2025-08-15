@@ -1400,7 +1400,7 @@ GM[이사]홍길동
         // Draw content based on print mode
         if (printMode === 'both' || printMode === 'left') {
             console.log('Drawing left content:', leftSettings.content);
-            drawRibbonText(ctx, leftSettings, 0, leftZoneWidth, canvas.height, 'left', ribbonWidth);
+            drawRibbonText(ctx, leftSettings, 0, leftZoneWidth, canvas.height, 'left');
         }
         
         if (printMode === 'both' && showCutLine) {
@@ -1420,7 +1420,7 @@ GM[이사]홍길동
             const rightStartX = printMode === 'both' ? centerX + mmToPx(5) : 0;
             const rightWidth = printMode === 'both' ? rightZoneWidth : canvas.width;
             console.log('Drawing right content:', rightSettings.content, 'at X:', rightStartX, 'width:', rightWidth);
-            drawRibbonText(ctx, rightSettings, rightStartX, rightWidth, canvas.height, 'right', ribbonWidth);
+            drawRibbonText(ctx, rightSettings, rightStartX, rightWidth, canvas.height, 'right');
         }
         
         // 롤리본 배출 영역 표시
@@ -1497,7 +1497,7 @@ GM[이사]홍길동
             
             // Draw content based on print mode
             if (printMode === 'both' || printMode === 'left') {
-                drawRibbonTextAtPosition(ctx, tempLeftSettings, 0, leftZoneWidth, ribbonHeightPx, 'left', ribbonWidth, currentY);
+                drawRibbonTextAtPosition(ctx, tempLeftSettings, 0, leftZoneWidth, ribbonHeightPx, 'left', currentY);
             }
             
             if (printMode === 'both' && showCutLine) {
@@ -1515,7 +1515,7 @@ GM[이사]홍길동
             if (printMode === 'both' || printMode === 'right') {
                 const rightStartX = printMode === 'both' ? centerX + mmToPx(5) : 0;
                 const rightWidth = printMode === 'both' ? rightZoneWidth : canvas.width;
-                drawRibbonTextAtPosition(ctx, tempRightSettings, rightStartX, rightWidth, ribbonHeightPx, 'right', ribbonWidth, currentY);
+                drawRibbonTextAtPosition(ctx, tempRightSettings, rightStartX, rightWidth, ribbonHeightPx, 'right', currentY);
             }
             
             // Add ribbon number label (optional)
@@ -1584,12 +1584,11 @@ GM[이사]홍길동
         width: number, 
         height: number, 
         side: 'left' | 'right',
-        ribbonWidthMm: number,
         offsetY: number = 0
     ) => {
         ctx.save();
         ctx.translate(0, offsetY);
-        drawRibbonText(ctx, settings, startX, width, height, side, ribbonWidthMm);
+        drawRibbonText(ctx, settings, startX, width, height, side);
         ctx.restore();
     };
 
@@ -1599,8 +1598,7 @@ GM[이사]홍길동
         startX: number, 
         width: number, 
         height: number, 
-        side: 'left' | 'right',
-        ribbonWidthMm: number
+        side: 'left' | 'right'
     ) => {
         const content = settings.content;
         if (!content || !content.trim()) return;
