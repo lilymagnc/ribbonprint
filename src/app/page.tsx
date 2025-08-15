@@ -663,14 +663,23 @@ GM[이사]홍길동
 	const drawRibbon = (canvas: HTMLCanvasElement | null, settings: RibbonTextSettings) => {
 		if (!canvas) return;
 		const totalWidth = rulerPx + ribbonWidthPx + rulerPx;
+		
+		// 양쪽 출력시 높이 2배로 (프린트와 동일)
+		let canvasHeight;
+		if (printMode === 'both') {
+			canvasHeight = ribbonLengthPx * 2;  // 양쪽 = 2배 높이
+		} else {
+			canvasHeight = ribbonLengthPx;      // 단일 = 원래 높이
+		}
+		
 		canvas.width = totalWidth;
-		canvas.height = ribbonLengthPx;
+		canvas.height = canvasHeight;
 		const ctx = canvas.getContext("2d");
 		if (!ctx) return;
 
 		// background gray
 		ctx.fillStyle = "#e5e7eb"; // gray-200
-		ctx.fillRect(0, 0, totalWidth, ribbonLengthPx);
+		ctx.fillRect(0, 0, totalWidth, canvasHeight);
 
 		// rulers
 		const drawRuler = (xStart: number) => {
@@ -706,7 +715,39 @@ GM[이사]홍길동
 		// ribbon center area
 		const ribbonX = rulerPx;
 		ctx.fillStyle = backgroundColor;
-		ctx.fillRect(ribbonX, 0, ribbonWidthPx, ribbonLengthPx);
+		ctx.fillRect(ribbonX, 0, ribbonWidthPx, canvasHeight);
+		
+		// 프린트와 동일한 텍스트 렌더링 적용 (96 DPI 미리보기용)
+		if (printMode === 'both') {
+			// 양쪽 출력: 1열로 세로 연결 (미리보기)
+			const singleSectionHeight = ribbonLengthPx;
+			
+			// 좌측 영역 (상단): 아래→위 방향
+			drawRibbonTextVerticalPreview(ctx, leftSettings, ribbonX, ribbonWidthPx, singleSectionHeight, 'bottom-up');
+			
+			// 중간 구분선 (선택사항)
+			if (showCutLine) {
+				ctx.strokeStyle = '#000000';
+				ctx.lineWidth = 1;
+				ctx.setLineDash([5, 3]);
+				ctx.beginPath();
+				ctx.moveTo(ribbonX, singleSectionHeight);
+				ctx.lineTo(ribbonX + ribbonWidthPx, singleSectionHeight);
+				ctx.stroke();
+				ctx.setLineDash([]);
+			}
+			
+			// 우측 영역 (하단): 위→아래 방향  
+			drawRibbonTextVerticalPreview(ctx, rightSettings, ribbonX, ribbonWidthPx, singleSectionHeight, 'top-down', singleSectionHeight);
+			
+		} else if (printMode === 'left') {
+			drawRibbonTextVerticalPreview(ctx, leftSettings, ribbonX, ribbonWidthPx, canvasHeight, 'top-down');
+		} else if (printMode === 'right') {
+			drawRibbonTextVerticalPreview(ctx, rightSettings, ribbonX, ribbonWidthPx, canvasHeight, 'top-down');
+		} else {
+			// 기본: leftSettings 사용
+			drawRibbonTextVerticalPreview(ctx, settings, ribbonX, ribbonWidthPx, canvasHeight, 'top-down');
+		}
 
 		// center guide lines
 		ctx.strokeStyle = "#60a5fa"; // blue-400
@@ -1056,7 +1097,7 @@ GM[이사]홍길동
     useEffect(() => {
         drawRibbon(leftCanvasRef.current, leftSettings);
         drawRibbon(rightCanvasRef.current, rightSettings);
-    }, [leftSettings, rightSettings, ribbonWidthPx, ribbonLengthPx, backgroundColor, fontKorean, fontCjk, fontLatin, baseFontFamily, baseFontSizePx, fontLoadTick]);
+    }, [leftSettings, rightSettings, ribbonWidthPx, ribbonLengthPx, backgroundColor, fontKorean, fontCjk, fontLatin, baseFontFamily, baseFontSizePx, fontLoadTick, printMode, showCutLine]);
 
 	const onLeftChange = <K extends keyof RibbonTextSettings>(key: K, value: RibbonTextSettings[K]) => {
 		setLeftSettings((prev) => {
@@ -1605,6 +1646,106 @@ GM[이사]홍길동
         ctx.save();
         ctx.translate(0, offsetY);
         drawRibbonText(ctx, settings, startX, width, height, side);
+        ctx.restore();
+    };
+
+    const drawRibbonTextVerticalPreview = (
+        ctx: CanvasRenderingContext2D, 
+        settings: RibbonTextSettings, 
+        startX: number, 
+        width: number, 
+        height: number, 
+        direction: 'top-down' | 'bottom-up',
+        offsetY: number = 0
+    ) => {
+        const content = settings.content;
+        if (!content || !content.trim()) return;
+        
+        // 미리보기용 - DPI 스케일링 없음 (96 DPI 기준)
+        const usedFontSize = Math.floor(settings.fontSizePx);
+        const fontWeight = settings.isBold ? '700' : '400';
+        const fontStyle = settings.isItalic ? 'italic' : 'normal';
+        
+        ctx.save();
+        ctx.fillStyle = settings.color;
+        
+        // Scale all measurements (96 DPI 기준)
+        const ribbonWidthPx = width;
+        const ribbonHeightPx = height;
+        const sidePaddingPx = mmToPx(settings.sidePaddingMm);
+        const topMarginPx = mmToPx(settings.topMarginMm);
+        const bottomMarginPx = mmToPx(settings.bottomMarginMm);
+        const charSpacingPx = mmToPx(settings.charSpacingMm);
+        
+        const ribbonX = startX;
+        const ribbonY = offsetY;
+        
+        // Calculate available area
+        const availableHeight = ribbonHeightPx - topMarginPx - bottomMarginPx;
+        
+        // Split content by newlines and process characters vertically
+        const lines = content.split('\n').filter(line => line.trim());
+        const allChars: string[] = [];
+        
+        // Convert to vertical character array
+        lines.forEach(line => {
+            for (const char of line) {
+                if (char.trim()) {
+                    allChars.push(char);
+                }
+            }
+        });
+        
+        if (allChars.length === 0) {
+            ctx.restore();
+            return;
+        }
+        
+        // Apply direction
+        const displayChars = direction === 'bottom-up' ? [...allChars].reverse() : allChars;
+        
+        // Calculate vertical positioning
+        const charHeight = usedFontSize;
+        const totalTextHeight = displayChars.length * charHeight + (displayChars.length - 1) * charSpacingPx;
+        const startY = ribbonY + topMarginPx + (availableHeight - totalTextHeight) / 2;
+        
+        // Font setup
+        const fontChainForChar = (char: string) => {
+            const code = char.charCodeAt(0);
+            if ((code >= 0x1100 && code <= 0x11FF) || 
+                (code >= 0x3130 && code <= 0x318F) || 
+                (code >= 0xAC00 && code <= 0xD7AF)) {
+                return `"${settings.koreanFont || fontKorean}", "${settings.cjkFont || fontCjk}", "${settings.latinFont || fontLatin}", ${baseFontFamily}, sans-serif`;
+            }
+            if ((code >= 0x4E00 && code <= 0x9FFF) || 
+                (code >= 0x3400 && code <= 0x4DBF)) {
+                return `"${settings.cjkFont || fontCjk}", "${settings.koreanFont || fontKorean}", "${settings.latinFont || fontLatin}", ${baseFontFamily}, sans-serif`;
+            }
+            return `"${settings.latinFont || fontLatin}", "${settings.koreanFont || fontKorean}", "${settings.cjkFont || fontCjk}", ${baseFontFamily}, sans-serif`;
+        };
+        
+        // Draw characters vertically
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        
+        const centerX = ribbonX + ribbonWidthPx / 2;
+        
+        displayChars.forEach((char, index) => {
+            const y = startY + (index * (charHeight + charSpacingPx)) + charHeight / 2;
+            
+            // Check for bracket scaling
+            let scale = 1;
+            if (settings.applyBracketScale && char.match(/[\[\]]/)) {
+                scale = settings.bracketScale || 0.5;
+            }
+            
+            ctx.save();
+            ctx.font = `${fontStyle} ${fontWeight} ${usedFontSize}px ${fontChainForChar(char)}`;
+            ctx.scale(scale, scale);
+            ctx.fillText(char, centerX / scale, y / scale);
+            ctx.restore();
+        });
+        
         ctx.restore();
     };
 
