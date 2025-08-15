@@ -1358,10 +1358,20 @@ GM[이사]홍길동
     const generateSingleRibbonLayout = () => {
         // 현재 작업 중인 리본 크기 그대로 사용
         const ribbonWidth = ribbonWidthMm;
-        // 롤 리본: 작업 길이 + 배출 여분, 재단 리본: 정확히 리본 길이만큼
-        const printHeight = isRollRibbon 
-            ? ribbonLengthMm + postFeed  // 롤리본: 작업 길이 + 배출 여분
-            : ribbonLengthMm;            // 재단리본: 미리 잘라놓은 길이 그대로
+        
+        // 양쪽 출력시: 길이를 2배로 (세로로 연결), 단일 출력시: 그대로
+        let printHeight;
+        if (printMode === 'both') {
+            // 양쪽 출력 = 1열로 세로 연결 (2배 길이)
+            printHeight = isRollRibbon 
+                ? (ribbonLengthMm * 2) + postFeed  // 롤리본: (작업길이 × 2) + 배출여분  
+                : (ribbonLengthMm * 2);            // 재단리본: 작업길이 × 2
+        } else {
+            // 단일 출력 = 원래 길이
+            printHeight = isRollRibbon 
+                ? ribbonLengthMm + postFeed  // 롤리본: 작업길이 + 배출여분
+                : ribbonLengthMm;            // 재단리본: 작업길이
+        }
         
         console.log('=== 리본 출력 디버깅 ===');
         console.log('Ribbon dimensions:', ribbonWidth + 'mm x ' + printHeight + 'mm');
@@ -1395,32 +1405,38 @@ GM[이사]홍길동
         const leftZoneWidth = centerX - mmToPx(5); // 5mm margin from center
         const rightZoneWidth = centerX - mmToPx(5);
         
-        console.log('Zones - Left width:', leftZoneWidth, 'Right width:', rightZoneWidth, 'Center X:', centerX);
-        
         // Draw content based on print mode
-        if (printMode === 'both' || printMode === 'left') {
-            console.log('Drawing left content:', leftSettings.content);
-            drawRibbonText(ctx, leftSettings, 0, leftZoneWidth, canvas.height, 'left');
-        }
-        
-        if (printMode === 'both' && showCutLine) {
-            console.log('Drawing cut line');
-            // Center dividing line (중간구분선 인쇄 = 좌우 구분선)
-            ctx.strokeStyle = '#000000';
-            ctx.lineWidth = 2;
-            ctx.setLineDash([10, 5]);
-            ctx.beginPath();
-            ctx.moveTo(centerX, 0);
-            ctx.lineTo(centerX, canvas.height);
-            ctx.stroke();
-            ctx.setLineDash([]);
-        }
-        
-        if (printMode === 'both' || printMode === 'right') {
-            const rightStartX = printMode === 'both' ? centerX + mmToPx(5) : 0;
-            const rightWidth = printMode === 'both' ? rightZoneWidth : canvas.width;
-            console.log('Drawing right content:', rightSettings.content, 'at X:', rightStartX, 'width:', rightWidth);
-            drawRibbonText(ctx, rightSettings, rightStartX, rightWidth, canvas.height, 'right');
+        if (printMode === 'both') {
+            // 양쪽 출력: 1열로 세로 연결
+            const singleSectionHeight = mmToPx(ribbonLengthMm);
+            
+            // 좌측 영역 (상단): 아래→위 방향
+            console.log('Drawing left content (bottom-up):', leftSettings.content);
+            drawRibbonTextVertical(ctx, leftSettings, 0, canvas.width, singleSectionHeight, 'bottom-up');
+            
+            // 중간 구분선 (선택사항)
+            if (showCutLine) {
+                console.log('Drawing horizontal cut line');
+                ctx.strokeStyle = '#000000';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([10, 5]);
+                ctx.beginPath();
+                ctx.moveTo(0, singleSectionHeight);
+                ctx.lineTo(canvas.width, singleSectionHeight);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+            
+            // 우측 영역 (하단): 위→아래 방향  
+            console.log('Drawing right content (top-down):', rightSettings.content);
+            drawRibbonTextVertical(ctx, rightSettings, 0, canvas.width, singleSectionHeight, 'top-down', singleSectionHeight);
+            
+        } else if (printMode === 'left') {
+            console.log('Drawing left content only:', leftSettings.content);
+            drawRibbonTextVertical(ctx, leftSettings, 0, canvas.width, canvas.height, 'top-down');
+        } else if (printMode === 'right') {
+            console.log('Drawing right content only:', rightSettings.content);
+            drawRibbonTextVertical(ctx, rightSettings, 0, canvas.width, canvas.height, 'top-down');
         }
         
         // 롤리본 배출 영역 표시
@@ -1589,6 +1605,110 @@ GM[이사]홍길동
         ctx.save();
         ctx.translate(0, offsetY);
         drawRibbonText(ctx, settings, startX, width, height, side);
+        ctx.restore();
+    };
+
+    const drawRibbonTextVertical = (
+        ctx: CanvasRenderingContext2D, 
+        settings: RibbonTextSettings, 
+        startX: number, 
+        width: number, 
+        height: number, 
+        direction: 'top-down' | 'bottom-up',
+        offsetY: number = 0
+    ) => {
+        const content = settings.content;
+        if (!content || !content.trim()) return;
+        
+        // Print DPI scaling factor (300 DPI vs 96 DPI screen)
+        const dpiScale = 300 / 96;
+        
+        // 폰트 설정
+        const usedFontSize = Math.floor(settings.fontSizePx * dpiScale);
+        const fontWeight = settings.isBold ? '700' : '400';
+        const fontStyle = settings.isItalic ? 'italic' : 'normal';
+        
+        ctx.save();
+        ctx.fillStyle = settings.color;
+        
+        // Scale all measurements
+        const ribbonWidthPx = width;
+        const ribbonHeightPx = height;
+        const sidePaddingPx = settings.sidePaddingMm * dpiScale * 3.7795275591;
+        const topMarginPx = settings.topMarginMm * dpiScale * 3.7795275591;
+        const bottomMarginPx = settings.bottomMarginMm * dpiScale * 3.7795275591;
+        const charSpacingPx = settings.charSpacingMm * dpiScale * 3.7795275591;
+        
+        const ribbonX = startX;
+        const ribbonY = offsetY;
+        
+        // Calculate available area
+        const availableHeight = ribbonHeightPx - topMarginPx - bottomMarginPx;
+        const targetInnerWidth = ribbonWidthPx - 2 * sidePaddingPx;
+        
+        // Split content by newlines and process characters vertically
+        const lines = content.split('\n').filter(line => line.trim());
+        const allChars: string[] = [];
+        
+        // Convert to vertical character array
+        lines.forEach(line => {
+            for (const char of line) {
+                if (char.trim()) {
+                    allChars.push(char);
+                }
+            }
+        });
+        
+        if (allChars.length === 0) {
+            ctx.restore();
+            return;
+        }
+        
+        // Apply direction
+        const displayChars = direction === 'bottom-up' ? [...allChars].reverse() : allChars;
+        
+        // Calculate vertical positioning
+        const charHeight = usedFontSize;
+        const totalTextHeight = displayChars.length * charHeight + (displayChars.length - 1) * charSpacingPx;
+        const startY = ribbonY + topMarginPx + (availableHeight - totalTextHeight) / 2;
+        
+        // Font setup
+        const fontChainForChar = (char: string) => {
+            const code = char.charCodeAt(0);
+            if ((code >= 0x1100 && code <= 0x11FF) || 
+                (code >= 0x3130 && code <= 0x318F) || 
+                (code >= 0xAC00 && code <= 0xD7AF)) {
+                return `"${settings.koreanFont || fontKorean}", "${settings.cjkFont || fontCjk}", "${settings.latinFont || fontLatin}", ${baseFontFamily}, sans-serif`;
+            }
+            if ((code >= 0x4E00 && code <= 0x9FFF) || 
+                (code >= 0x3400 && code <= 0x4DBF)) {
+                return `"${settings.cjkFont || fontCjk}", "${settings.koreanFont || fontKorean}", "${settings.latinFont || fontLatin}", ${baseFontFamily}, sans-serif`;
+            }
+            return `"${settings.latinFont || fontLatin}", "${settings.koreanFont || fontKorean}", "${settings.cjkFont || fontCjk}", ${baseFontFamily}, sans-serif`;
+        };
+        
+        // Draw characters vertically
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        
+        const centerX = ribbonX + ribbonWidthPx / 2;
+        
+        displayChars.forEach((char, index) => {
+            const y = startY + (index * (charHeight + charSpacingPx)) + charHeight / 2;
+            
+            // Check for bracket scaling
+            let scale = 1;
+            if (settings.applyBracketScale && char.match(/[\[\]]/)) {
+                scale = settings.bracketScale || 0.5;
+            }
+            
+            ctx.save();
+            ctx.font = `${fontStyle} ${fontWeight} ${usedFontSize}px ${fontChainForChar(char)}`;
+            ctx.scale(scale, scale);
+            ctx.fillText(char, centerX / scale, y / scale);
+            ctx.restore();
+        });
+        
         ctx.restore();
     };
 
