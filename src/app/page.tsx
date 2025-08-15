@@ -2435,7 +2435,21 @@ GM[이사]홍길동
 				</section>
 
                 <section className="lg:col-span-2 rounded-lg border border-gray-200 p-4">
-					<h2 className="font-medium mb-3">미리보기</h2>
+					<div className="flex items-center justify-between mb-3">
+                        <h2 className="font-medium">미리보기</h2>
+                        <button 
+                            onClick={() => {
+                                setPrintDialogOpen(true);
+                                if (installedPrinters.length === 0) {
+                                    getInstalledPrinters();
+                                }
+                            }} 
+                            className="btn-blue px-3 py-1.5 rounded-lg flex items-center gap-2 text-white font-medium text-sm"
+                        >
+                            <Printer className="w-3.5 h-3.5" />
+                            리본 프린트
+                        </button>
+                    </div>
                     <div ref={previewContainerRef} className="w-full overflow-auto border rounded-md p-6 bg-gray-50 flex items-start justify-center" style={{ maxHeight: Math.max(200, leftPanelHeight - 80) }}>
                         <div className={`flex gap-10`} style={{ transform: `scale(${effectiveScale})`, transformOrigin: 'top center' }}>
 							<div>
@@ -2454,21 +2468,7 @@ GM[이사]홍길동
 							</div>
                         </div>
                         
-                        {/* Ribbon Print Button */}
-                        <div className="mt-4 flex justify-center">
-                            <button 
-                                onClick={() => {
-                                    setPrintDialogOpen(true);
-                                    if (installedPrinters.length === 0) {
-                                        getInstalledPrinters();
-                                    }
-                                }} 
-                                className="btn-blue px-4 py-2 rounded-lg flex items-center gap-2 text-white font-medium"
-                            >
-                                <Printer className="w-4 h-4" />
-                                리본 프린트
-                            </button>
-                        </div>
+
 					</div>
                 </section>
         </div>
