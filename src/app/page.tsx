@@ -306,6 +306,20 @@ export default function Home() {
     const [installedPrinters, setInstalledPrinters] = useState<string[]>([]);
     const [loadingPrinters, setLoadingPrinters] = useState<boolean>(false);
     
+    // Multi Ribbon Batch Printing
+    const [ribbonBatch, setRibbonBatch] = useState<Array<{
+        id: string;
+        leftContent: string;
+        rightContent: string;
+        enabled: boolean;
+    }>>([
+        { id: '1', leftContent: '경조사어 리본', rightContent: '보내는이\n[회사명]', enabled: true },
+        { id: '2', leftContent: '축하합니다', rightContent: '○○○님', enabled: false },
+        { id: '3', leftContent: '감사합니다', rightContent: '△△△님', enabled: false },
+    ]);
+    const [batchMode, setBatchMode] = useState<boolean>(false);
+    const [ribbonSpacingMm, setRibbonSpacingMm] = useState<number>(20); // 리본 간 간격
+    
     // Get Windows installed printers
     const getInstalledPrinters = async () => {
         setLoadingPrinters(true);
@@ -1304,8 +1318,44 @@ GM[이사]홍길동
 		setEnvOpen(false);
 	};
 
+    // Multi Ribbon Batch Functions
+    const addRibbonToBatch = () => {
+        const newId = (ribbonBatch.length + 1).toString();
+        setRibbonBatch([...ribbonBatch, {
+            id: newId,
+            leftContent: leftSettings.content,
+            rightContent: rightSettings.content,
+            enabled: true
+        }]);
+    };
+    
+    const removeRibbonFromBatch = (id: string) => {
+        setRibbonBatch(ribbonBatch.filter(r => r.id !== id));
+    };
+    
+    const updateRibbonInBatch = (id: string, field: 'leftContent' | 'rightContent', value: string) => {
+        setRibbonBatch(ribbonBatch.map(r => 
+            r.id === id ? { ...r, [field]: value } : r
+        ));
+    };
+    
+    const toggleRibbonInBatch = (id: string) => {
+        setRibbonBatch(ribbonBatch.map(r => 
+            r.id === id ? { ...r, enabled: !r.enabled } : r
+        ));
+    };
+
     // Ribbon Print Functions
     const generateRibbonPrintLayout = () => {
+        if (batchMode && isRollRibbon) {
+            return generateBatchRibbonLayout();
+        }
+        
+        // 단일 리본 출력
+        return generateSingleRibbonLayout();
+    };
+    
+    const generateSingleRibbonLayout = () => {
         // 현재 작업 중인 리본 크기 그대로 사용
         const ribbonWidth = ribbonWidthMm;
         // 롤 리본: 작업 길이 + 배출 여분, 재단 리본: 정확히 리본 길이만큼
@@ -1313,10 +1363,19 @@ GM[이사]홍길동
             ? ribbonLengthMm + postFeed  // 롤리본: 작업 길이 + 배출 여분
             : ribbonLengthMm;            // 재단리본: 미리 잘라놓은 길이 그대로
         
+        console.log('=== 리본 출력 디버깅 ===');
+        console.log('Ribbon dimensions:', ribbonWidth + 'mm x ' + printHeight + 'mm');
+        console.log('Print mode:', printMode);
+        console.log('Left content:', leftSettings.content);
+        console.log('Right content:', rightSettings.content);
+        
         // Create print-specific canvas
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
-        if (!ctx) return null;
+        if (!ctx) {
+            console.error('Canvas context creation failed');
+            return null;
+        }
         
         // Set canvas size (300 DPI for print quality)
         const dpi = 300;
@@ -1325,21 +1384,28 @@ GM[이사]홍길동
         canvas.width = mmToPx(ribbonWidth);
         canvas.height = mmToPx(printHeight);
         
+        console.log('Canvas pixel size:', canvas.width + 'px x ' + canvas.height + 'px');
+        
         // Background
         ctx.fillStyle = backgroundColor;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
+        console.log('Background filled with:', backgroundColor);
         
         const centerX = canvas.width / 2;
         const leftZoneWidth = centerX - mmToPx(5); // 5mm margin from center
         const rightZoneWidth = centerX - mmToPx(5);
         
+        console.log('Zones - Left width:', leftZoneWidth, 'Right width:', rightZoneWidth, 'Center X:', centerX);
+        
         // Draw content based on print mode
         if (printMode === 'both' || printMode === 'left') {
+            console.log('Drawing left content:', leftSettings.content);
             drawRibbonText(ctx, leftSettings, 0, leftZoneWidth, canvas.height, 'left', ribbonWidth);
         }
         
         if (printMode === 'both' && showCutLine) {
-            // Center dividing line (자르줄 인쇄 = 좌우 구분선)
+            console.log('Drawing cut line');
+            // Center dividing line (중간구분선 인쇄 = 좌우 구분선)
             ctx.strokeStyle = '#000000';
             ctx.lineWidth = 2;
             ctx.setLineDash([10, 5]);
@@ -1353,6 +1419,7 @@ GM[이사]홍길동
         if (printMode === 'both' || printMode === 'right') {
             const rightStartX = printMode === 'both' ? centerX + mmToPx(5) : 0;
             const rightWidth = printMode === 'both' ? rightZoneWidth : canvas.width;
+            console.log('Drawing right content:', rightSettings.content, 'at X:', rightStartX, 'width:', rightWidth);
             drawRibbonText(ctx, rightSettings, rightStartX, rightWidth, canvas.height, 'right', ribbonWidth);
         }
         
@@ -1385,6 +1452,147 @@ GM[이사]홍길동
         return canvas;
     };
     
+    const generateBatchRibbonLayout = () => {
+        const enabledRibbons = ribbonBatch.filter(r => r.enabled);
+        if (enabledRibbons.length === 0) return null;
+        
+        const ribbonWidth = ribbonWidthMm;
+        const singleRibbonHeight = ribbonLengthMm;
+        const spacingHeight = ribbonSpacingMm;
+        
+        // 전체 배치 높이 계산: (리본 높이 × 개수) + (간격 × (개수-1)) + 배출 여분
+        const totalBatchHeight = (singleRibbonHeight * enabledRibbons.length) + 
+                                (spacingHeight * (enabledRibbons.length - 1)) + 
+                                postFeed;
+        
+        // Create large batch canvas
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return null;
+        
+        // Set canvas size (300 DPI for print quality)
+        const dpi = 300;
+        const mmToPx = (mm: number) => (mm * dpi) / 25.4;
+        
+        canvas.width = mmToPx(ribbonWidth);
+        canvas.height = mmToPx(totalBatchHeight);
+        
+        // Background
+        ctx.fillStyle = backgroundColor;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Draw each ribbon in sequence
+        let currentY = 0;
+        
+        enabledRibbons.forEach((ribbon, index) => {
+            const ribbonHeightPx = mmToPx(singleRibbonHeight);
+            
+            // Create temporary settings for this ribbon
+            const tempLeftSettings = { ...leftSettings, content: ribbon.leftContent };
+            const tempRightSettings = { ...rightSettings, content: ribbon.rightContent };
+            
+            const centerX = canvas.width / 2;
+            const leftZoneWidth = centerX - mmToPx(5);
+            const rightZoneWidth = centerX - mmToPx(5);
+            
+            // Draw content based on print mode
+            if (printMode === 'both' || printMode === 'left') {
+                drawRibbonTextAtPosition(ctx, tempLeftSettings, 0, leftZoneWidth, ribbonHeightPx, 'left', ribbonWidth, currentY);
+            }
+            
+            if (printMode === 'both' && showCutLine) {
+                // Center dividing line
+                ctx.strokeStyle = '#000000';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([10, 5]);
+                ctx.beginPath();
+                ctx.moveTo(centerX, currentY);
+                ctx.lineTo(centerX, currentY + ribbonHeightPx);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+            
+            if (printMode === 'both' || printMode === 'right') {
+                const rightStartX = printMode === 'both' ? centerX + mmToPx(5) : 0;
+                const rightWidth = printMode === 'both' ? rightZoneWidth : canvas.width;
+                drawRibbonTextAtPosition(ctx, tempRightSettings, rightStartX, rightWidth, ribbonHeightPx, 'right', ribbonWidth, currentY);
+            }
+            
+            // Add ribbon number label (optional)
+            if (enabledRibbons.length > 1) {
+                ctx.fillStyle = '#cccccc';
+                ctx.font = '8px Arial';
+                ctx.textAlign = 'right';
+                ctx.fillText(`#${ribbon.id}`, canvas.width - 5, currentY + 15);
+            }
+            
+            currentY += ribbonHeightPx;
+            
+            // Add spacing between ribbons (except after last ribbon)
+            if (index < enabledRibbons.length - 1) {
+                // Draw spacing area with light background
+                const spacingHeightPx = mmToPx(spacingHeight);
+                ctx.fillStyle = '#f8f8f8';
+                ctx.fillRect(0, currentY, canvas.width, spacingHeightPx);
+                
+                // Draw separator line
+                ctx.strokeStyle = '#e0e0e0';
+                ctx.lineWidth = 1;
+                ctx.setLineDash([5, 5]);
+                ctx.beginPath();
+                ctx.moveTo(0, currentY + spacingHeightPx / 2);
+                ctx.lineTo(canvas.width, currentY + spacingHeightPx / 2);
+                ctx.stroke();
+                ctx.setLineDash([]);
+                
+                currentY += spacingHeightPx;
+            }
+        });
+        
+        // 롤리본 배출 영역 표시
+        if (postFeed > 0) {
+            const feedAreaHeight = mmToPx(postFeed);
+            
+            // 배출 영역 배경 (연한 회색)
+            ctx.fillStyle = '#f0f0f0';
+            ctx.fillRect(0, currentY, canvas.width, feedAreaHeight);
+            
+            // 배출 영역 경계선
+            ctx.strokeStyle = '#cccccc';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([5, 5]);
+            ctx.beginPath();
+            ctx.moveTo(0, currentY);
+            ctx.lineTo(canvas.width, currentY);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            
+            // 배출 영역 라벨
+            ctx.fillStyle = '#666666';
+            ctx.font = '12px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(`배출 여분 ${postFeed}mm`, canvas.width / 2, currentY + feedAreaHeight / 2);
+        }
+        
+        return canvas;
+    };
+    
+    const drawRibbonTextAtPosition = (
+        ctx: CanvasRenderingContext2D, 
+        settings: RibbonTextSettings, 
+        startX: number, 
+        width: number, 
+        height: number, 
+        side: 'left' | 'right',
+        ribbonWidthMm: number,
+        offsetY: number = 0
+    ) => {
+        ctx.save();
+        ctx.translate(0, offsetY);
+        drawRibbonText(ctx, settings, startX, width, height, side, ribbonWidthMm);
+        ctx.restore();
+    };
+
     const drawRibbonText = (
         ctx: CanvasRenderingContext2D, 
         settings: RibbonTextSettings, 
@@ -1624,12 +1832,25 @@ GM[이사]홍길동
     
     const executeRibbonPrint = () => {
         const canvas = generateRibbonPrintLayout();
-        if (!canvas) return;
+        if (!canvas) {
+            alert('캔버스 생성에 실패했습니다.');
+            return;
+        }
+        
+        // 디버깅: 캔버스 크기 확인
+        console.log('Canvas size:', canvas.width, 'x', canvas.height);
         
         const ribbonWidth = ribbonWidthMm;
         const printHeight = isRollRibbon 
             ? ribbonLengthMm + postFeed  // 롤리본: 작업 길이 + 배출 여분
             : ribbonLengthMm;            // 재단리본: 미리 잘라놓은 길이 그대로
+        
+        // 캔버스를 이미지로 변환 (고품질)
+        const dataURL = canvas.toDataURL('image/png', 1.0);
+        
+        // 디버깅: 이미지 데이터 확인
+        console.log('DataURL length:', dataURL.length);
+        console.log('DataURL preview:', dataURL.substring(0, 100));
         
         // Create print window with enhanced settings
         const printWindow = window.open('', '_blank', 'width=800,height=600');
@@ -1646,9 +1867,14 @@ GM[이사]홍길동
                 <title>리본 프린트 - ${selectedPrinter}</title>
                 <style>
                     @page {
-                        size: ${ribbonWidth}mm ${printHeight}mm;
+                        size: ${ribbonWidth}mm ${isRollRibbon ? 'auto' : printHeight + 'mm'};
                         margin: 0mm;
                         padding: 0mm;
+                        ${isRollRibbon ? `
+                        /* 롤 리본: 연속 배너 모드 */
+                        -webkit-print-color-adjust: exact;
+                        print-color-adjust: exact;
+                        ` : ''}
                     }
                     * {
                         margin: 0;
@@ -1662,11 +1888,19 @@ GM[이사]홍길동
                     }
                     .print-container {
                         width: ${ribbonWidth}mm;
-                        height: ${printHeight}mm;
+                        ${isRollRibbon ? `
+                        min-height: ${printHeight}mm;
+                        height: auto;
+                        ` : `height: ${printHeight}mm;`}
                         margin: 0;
                         padding: 0;
                         display: block;
                         position: relative;
+                        ${isRollRibbon ? `
+                        /* 롤 리본: 연속 출력 설정 */
+                        page-break-inside: avoid;
+                        break-inside: avoid;
+                        ` : ''}
                     }
                     .ribbon-image {
                         width: 100%;
@@ -1680,17 +1914,40 @@ GM[이사]홍길동
                     @media print {
                         html, body {
                             width: ${ribbonWidth}mm !important;
-                            height: ${printHeight}mm !important;
+                            ${isRollRibbon ? `
+                            height: auto !important;
+                            min-height: ${printHeight}mm !important;
+                            ` : `height: ${printHeight}mm !important;`}
                         }
                         .print-container {
+                            ${isRollRibbon ? `
+                            /* 롤 리본: 연속 배너 출력 */
+                            page-break-inside: avoid;
+                            break-inside: avoid;
+                            ` : `
+                            /* 재단 리본: 단일 페이지 출력 */
                             break-inside: avoid;
                             page-break-inside: avoid;
                             page-break-before: avoid;
                             page-break-after: avoid;
+                            `}
                         }
                         .ribbon-image {
                             break-inside: avoid;
+                            ${isRollRibbon ? `
+                            height: auto !important;
+                            min-height: ${printHeight}mm;
+                            ` : ''}
                         }
+                        ${isRollRibbon ? `
+                        /* 롤 리본 전용 스타일 */
+                        @page :first {
+                            margin-top: 0mm;
+                        }
+                        @page :last {
+                            margin-bottom: ${postFeed}mm;
+                        }
+                        ` : ''}
                     }
                     @media screen {
                         body {
@@ -1719,15 +1976,41 @@ GM[이사]홍길동
                     }
                 </style>
                 <script>
+                    let imageLoaded = false;
+                    
+                    function checkAndPrint() {
+                        if (imageLoaded) {
+                            console.log('Image loaded, starting print...');
+                            setTimeout(function() {
+                                window.print();
+                            }, 500);
+                        }
+                    }
+                    
                     window.addEventListener('load', function() {
-                        // 이미지 로드 완료 후 자동 프린트
-                        setTimeout(function() {
-                            window.print();
-                        }, 1000);
+                        console.log('Window loaded');
+                        const img = document.querySelector('.ribbon-image');
+                        if (img) {
+                            if (img.complete) {
+                                console.log('Image already loaded');
+                                imageLoaded = true;
+                                checkAndPrint();
+                            } else {
+                                img.onload = function() {
+                                    console.log('Image loaded successfully');
+                                    imageLoaded = true;
+                                    checkAndPrint();
+                                };
+                                img.onerror = function() {
+                                    console.error('Image failed to load');
+                                    alert('이미지 로드에 실패했습니다.');
+                                };
+                            }
+                        }
                     });
                     
                     window.addEventListener('afterprint', function() {
-                        // 프린트 완료 후 창 닫기
+                        console.log('Print completed');
                         setTimeout(function() {
                             window.close();
                         }, 500);
@@ -1739,10 +2022,11 @@ GM[이사]홍길동
                     프린터: ${selectedPrinter}<br>
                     크기: ${ribbonWidth}mm × ${printHeight}mm<br>
                     모드: ${printMode === 'both' ? '양쪽' : printMode === 'left' ? '좌측' : '우측'}<br>
-                    리본: ${isRollRibbon ? '롤' : '재단'}${isRollRibbon ? ` (배출: ${postFeed}mm)` : ''}
+                    리본: ${isRollRibbon ? '롤' : '재단'}${isRollRibbon ? ` (배출: ${postFeed}mm)` : ''}<br>
+                    배치모드: ${batchMode ? `ON (${ribbonBatch.filter(r => r.enabled).length}개 리본)` : 'OFF'}
                 </div>
                 <div class="print-container">
-                    <img class="ribbon-image" src="${canvas.toDataURL('image/png', 1.0)}" alt="Ribbon Print" />
+                    <img class="ribbon-image" src="${dataURL}" alt="Ribbon Print" onload="console.log('IMG onload triggered')" onerror="console.error('IMG onerror triggered')" />
                 </div>
             </body>
             </html>
@@ -2516,6 +2800,85 @@ GM[이사]홍길동
                             </div>
                         </div>
                         
+                        {/* Batch Mode (only for Roll Ribbon) */}
+                        {isRollRibbon && (
+                            <div>
+                                <div className="flex items-center justify-between mb-2">
+                                    <label className="text-sm font-medium">배치 출력 모드</label>
+                                    <label className="flex items-center">
+                                        <input 
+                                            type="checkbox" 
+                                            checked={batchMode} 
+                                            onChange={(e) => setBatchMode(e.target.checked)}
+                                            className="mr-2"
+                                        />
+                                        여러 리본 연속 출력
+                                    </label>
+                                </div>
+                                
+                                {batchMode && (
+                                    <div className="space-y-3 p-3 bg-gray-50 rounded-lg">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-sm font-medium">리본 목록 ({ribbonBatch.filter(r => r.enabled).length}개 선택됨)</span>
+                                            <button 
+                                                onClick={addRibbonToBatch}
+                                                className="text-xs bg-blue-500 text-white px-2 py-1 rounded"
+                                            >
+                                                현재 리본 추가
+                                            </button>
+                                        </div>
+                                        
+                                        <div className="max-h-32 overflow-y-auto space-y-2">
+                                            {ribbonBatch.map((ribbon) => (
+                                                <div key={ribbon.id} className="flex items-center gap-2 p-2 bg-white rounded border">
+                                                    <input 
+                                                        type="checkbox"
+                                                        checked={ribbon.enabled}
+                                                        onChange={() => toggleRibbonInBatch(ribbon.id)}
+                                                        className="mr-1"
+                                                    />
+                                                    <div className="flex-1 grid grid-cols-2 gap-2 text-xs">
+                                                        <input 
+                                                            type="text"
+                                                            value={ribbon.leftContent}
+                                                            onChange={(e) => updateRibbonInBatch(ribbon.id, 'leftContent', e.target.value)}
+                                                            placeholder="경조사"
+                                                            className="border rounded px-1 py-0.5"
+                                                        />
+                                                        <input 
+                                                            type="text"
+                                                            value={ribbon.rightContent}
+                                                            onChange={(e) => updateRibbonInBatch(ribbon.id, 'rightContent', e.target.value)}
+                                                            placeholder="보내는이"
+                                                            className="border rounded px-1 py-0.5"
+                                                        />
+                                                    </div>
+                                                    <button 
+                                                        onClick={() => removeRibbonFromBatch(ribbon.id)}
+                                                        className="text-red-500 text-xs"
+                                                    >
+                                                        ✕
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        
+                                        <div>
+                                            <label className="block text-xs font-medium mb-1">리본 간격 (mm)</label>
+                                            <input 
+                                                type="number"
+                                                min="0"
+                                                max="100"
+                                                value={ribbonSpacingMm}
+                                                onChange={(e) => setRibbonSpacingMm(parseInt(e.target.value) || 0)}
+                                                className="input-bevel w-full px-2 py-1 text-sm"
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        
                         {/* Print Copies */}
                         <div>
                             <label className="block text-sm font-medium mb-2">매수</label>
@@ -2538,7 +2901,7 @@ GM[이사]홍길동
                                     onChange={(e) => setShowCutLine(e.target.checked)}
                                     className="mr-2"
                                 />
-                                자르줄 인쇄 (좌우 구분선)
+                                중간구분선 인쇄 (좌우 구분선)
                             </label>
                         </div>
                         
@@ -2606,12 +2969,30 @@ GM[이사]홍길동
                     <div className="bg-blue-50 p-4 rounded-lg mt-4">
                         <h4 className="font-medium text-blue-900 mb-2">📋 프린터 설정 안내</h4>
                         <div className="text-sm text-blue-800 space-y-1">
-                            <div><strong>1. 용지 크기:</strong> 사용자 정의 → {ribbonWidthMm}mm × {isRollRibbon ? `${ribbonLengthMm + postFeed}mm` : `${ribbonLengthMm}mm`}</div>
-                            <div><strong>2. 방향:</strong> 세로(Portrait)</div>
-                            <div><strong>3. 여백:</strong> 최소 또는 0mm</div>
-                            <div><strong>4. 배율:</strong> 100% (실제 크기)</div>
-                            <div><strong>5. 품질:</strong> 최고 품질</div>
-                            {isRollRibbon && <div><strong>6. 급지:</strong> 연속 용지/배너 모드</div>}
+                            {isRollRibbon ? (
+                                <>
+                                    <div className="font-semibold text-blue-900">🎯 롤 리본 (연속 배너 출력)</div>
+                                    <div><strong>1. 용지 크기:</strong> 사용자 정의 → {ribbonWidthMm}mm × <strong>연속</strong> (또는 매우 긴 길이)</div>
+                                    <div><strong>2. 급지 방법:</strong> <strong>배너 모드</strong> 또는 <strong>연속 용지</strong></div>
+                                    <div><strong>3. 용지 종류:</strong> <strong>배너</strong> 또는 <strong>롤 용지</strong></div>
+                                    <div><strong>4. 방향:</strong> 세로(Portrait)</div>
+                                    <div><strong>5. 여백:</strong> 0mm (여백 없음)</div>
+                                    <div><strong>6. 배율:</strong> 100% (실제 크기)</div>
+                                    <div><strong>7. 품질:</strong> 최고 품질</div>
+                                    <div><strong>8. 배출:</strong> 출력 후 {postFeed}mm 여분 배출</div>
+                                </>
+                            ) : (
+                                <>
+                                    <div className="font-semibold text-blue-900">✂️ 재단 리본 (단일 출력)</div>
+                                    <div><strong>1. 용지 크기:</strong> 사용자 정의 → {ribbonWidthMm}mm × {ribbonLengthMm}mm</div>
+                                    <div><strong>2. 급지 방법:</strong> <strong>수동 급지</strong> (리본 길이만큼 잘라서 급지)</div>
+                                    <div><strong>3. 용지 종류:</strong> <strong>일반 용지</strong></div>
+                                    <div><strong>4. 방향:</strong> 세로(Portrait)</div>
+                                    <div><strong>5. 여백:</strong> 0mm (여백 없음)</div>
+                                    <div><strong>6. 배율:</strong> 100% (실제 크기)</div>
+                                    <div><strong>7. 품질:</strong> 최고 품질</div>
+                                </>
+                            )}
                         </div>
                     </div>
                     
