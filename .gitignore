@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+.gemini/
+*.log
+.DS_Store
+ribbon-web/node_modules/
+ribbon-web/dist/
+__pycache__/
+*.pyc

@@ -1,0 +1,8 @@
+@import "tailwindcss";
+
+/* 추가적인 커스텀 스타일이나 배경 등은 추후 확장 */
+body {
+  margin: 0;
+  background-color: #f3f4f6;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
