@@ -10,6 +10,24 @@
 }
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Nanum+Gothic:wght@400;700;800&family=Nanum+Myeongjo:wght@400;700;800&family=Noto+Sans+KR:wght@400;500;700;900&family=Noto+Serif+KR:wght@400;500;700;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Nanum+Brush+Script&family=Black+Han+Sans&family=East+Sea+Dokdo&family=Song+Myung&family=Gowun+Batang:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=LXGW+WenKai+TC:wght@400;700&family=LXGW+WenKai+Mono+TC:wght@400;700&family=Klee+One:wght@400;600&family=Yuji+Syuku&family=Yuji+Boku&family=Yuji+Mai&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=UoqMunThenKhung&family=Iansui&family=Kaisei+HarunoUmi:wght@400;700&family=Zen+Antique+Soft&display=swap');
+
+@font-face {
+  font-family: 'JoseonPalace';
+  src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_20-04@1.0/ChosunGs.woff') format('woff');
+  font-weight: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'ZiHunJinLing';
+  src: url('/fonts/ZiHunJinLing.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
 
 :root {
   font-family: 'Inter', -apple-system, sans-serif;
@@ -98,3 +116,22 @@ input[type="number"] {
 .font-noto-sans { font-family: 'Noto Sans KR', sans-serif; }
 .font-nanum-myeongjo { font-family: 'Nanum Myeongjo', serif; }
 .font-nanum-gothic { font-family: 'Nanum Gothic', sans-serif; }
+.font-brush { font-family: 'Nanum Brush Script', cursive; }
+.font-bold { font-family: 'Black Han Sans', sans-serif; }
+.font-dokdo { font-family: 'East Sea Dokdo', cursive; }
+.font-song { font-family: 'Song Myung', serif; }
+.font-gowun { font-family: 'Gowun Batang', serif; }
+.font-gungsuh { font-family: 'Gungsuh', '궁서', serif; } 
+.font-chosun { font-family: 'JoseonPalace', serif; }
+
+/* Custom Hanja Researched Fonts */
+.font-hj-uoq { font-family: 'UoqMunThenKhung', serif; }
+.font-hj-lxgw { font-family: 'LXGW WenKai TC', serif; }
+.font-hj-klee { font-family: 'Klee One', cursive; font-weight: 600; }
+.font-hj-iansui { font-family: 'Iansui', cursive; }
+.font-hj-syuku { font-family: 'Yuji Syuku', serif; }
+.font-hj-boku { font-family: 'Yuji Boku', serif; }
+.font-hj-mai { font-family: 'Yuji Mai', serif; }
+.font-hj-kaisei { font-family: 'Kaisei HarunoUmi', serif; }
+.font-hj-zen { font-family: 'Zen Antique Soft', serif; }
+.font-hj-zihun { font-family: 'ZiHunJinLing', cursive; } /* Custom Local Font: 字小魂金陵手书 */

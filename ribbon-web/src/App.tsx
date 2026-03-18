@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Printer, 
   Settings, 
@@ -7,8 +7,14 @@ import {
   Maximize2,
   Minimize2,
   RotateCw,
-  Undo2
+  Undo2,
+  ChevronDown,
+  Search,
+  Check,
+  Wrench
 } from 'lucide-react';
+import { FontManagerDialog } from './FontManagerDialog';
+import { type CustomFontInfo, getAllCustomFonts, getHiddenFonts } from './lib/font-store';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -19,12 +25,103 @@ function cn(...inputs: ClassValue[]) {
 // ==========================================
 // Constants & Config
 // ==========================================
-const FONTS = [
-  { value: 'font-noto-serif', label: 'Noto Serif (명조)' },
-  { value: 'font-noto-sans', label: 'Noto Sans (고딕)' },
-  { value: 'font-nanum-myeongjo', label: '나눔명조' },
-  { value: 'font-nanum-gothic', label: '나눔고딕' },
+export type FontLang = 'ko' | 'en' | 'hj' | 'sym';
+
+export interface FontItem {
+  value: string;
+  name: string;
+  langs: FontLang[];
+  preview: string;
+}
+
+const FONTS: FontItem[] = [
+  // 커스텀 한자 폰트 (유저 직접 지정)
+  { value: 'font-hj-zihun', name: '字小魂金陵手书 (로컬 폰트)', langs: ['hj'], preview: '祝發展 謹弔' },
+  { value: 'font-hj-uoq', name: 'UoqMunThenKhung', langs: ['hj'], preview: '祝發展 謹弔' },
+  { value: 'font-hj-lxgw', name: 'LXGW WenKai TC', langs: ['hj'], preview: '祝發展 謹弔' },
+  { value: 'font-hj-klee', name: 'Klee One (Bold 600)', langs: ['hj'], preview: '祝發展 謹弔' },
+  { value: 'font-hj-iansui', name: 'Iansui', langs: ['hj'], preview: '祝發展 謹弔' },
+  { value: 'font-hj-syuku', name: 'Yuji Syuku', langs: ['hj'], preview: '祝發展 謹弔' },
+  { value: 'font-hj-boku', name: 'Yuji Boku', langs: ['hj'], preview: '祝發展 謹弔' },
+  { value: 'font-hj-mai', name: 'Yuji Mai', langs: ['hj'], preview: '祝發展 謹弔' },
+  { value: 'font-hj-kaisei', name: 'Kaisei HarunoUmi', langs: ['hj'], preview: '祝發展 謹弔' },
+  { value: 'font-hj-zen', name: 'Zen Antique Soft', langs: ['hj'], preview: '祝發展 謹弔' },
+
+  // 붓글씨/서예
+  { value: 'font-brush', name: '나눔 붓글씨', langs: ['ko', 'hj', 'en', 'sym'], preview: '아름다운 붓글씨' },
+  { value: 'font-dokdo', name: '독도체', langs: ['ko', 'en', 'sym'], preview: '동해물과 백두산이' },
+  { value: 'font-gungsuh', name: '궁서체 (기본)', langs: ['ko', 'hj', 'en', 'sym'], preview: '궁서체 기본' },
+  { value: 'font-chosun', name: '조선 궁서체', langs: ['ko', 'hj', 'en', 'sym'], preview: '祝發展 謹弔 (조선궁서)' },
+  
+  // 명조/세리프
+  { value: 'font-noto-serif', name: 'Noto Serif (명조)', langs: ['ko', 'hj', 'en', 'sym'], preview: '단정한 명조체' },
+  { value: 'font-nanum-myeongjo', name: '나눔명조', langs: ['ko', 'hj', 'en', 'sym'], preview: '나눔명조체' },
+  { value: 'font-song', name: '송명체', langs: ['ko', 'hj', 'en', 'sym'], preview: '송명체 테스트' },
+  { value: 'font-gowun', name: '고운바탕', langs: ['ko', 'hj', 'en', 'sym'], preview: '고운바탕체' },
+  
+  // 고딕/산세리프
+  { value: 'font-noto-sans', name: 'Noto Sans (고딕)', langs: ['ko', 'hj', 'en', 'sym'], preview: '깔끔한 고딕체' },
+  { value: 'font-nanum-gothic', name: '나눔고딕', langs: ['ko', 'hj', 'en', 'sym'], preview: '나눔고딕체' },
+  { value: 'font-bold', name: '블랙한산스 (굵음)', langs: ['ko', 'en', 'sym'], preview: '강렬한 굵은 글씨' },
 ];
+
+function FontSelector({ value, onChange, mode, fonts }: { value: string, onChange: (v: string) => void, mode: FontLang, fonts: FontItem[] }) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  
+  const filteredFonts = fonts.filter(f => f.langs.includes(mode) && (f.name.toLowerCase().includes(search.toLowerCase()) || f.value.toLowerCase().includes(search.toLowerCase())));
+  const selectedFont = fonts.find(f => f.value === value) || fonts[0] || FONTS[0];
+
+  return (
+    <div className="relative w-full text-left font-sans">
+      <button 
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between bg-slate-900 text-white rounded-lg p-2 text-sm border border-slate-700 outline-none hover:bg-slate-800 transition shadow-sm"
+      >
+        <span className={cn(selectedFont.value, "text-[15px]")}>{selectedFont.name}</span>
+        <ChevronDown className="w-4 h-4 text-slate-400" />
+      </button>
+      
+      {open && (
+        <div className="absolute z-[100] top-full left-0 right-0 mt-2 bg-slate-800 border border-slate-700 rounded-lg shadow-2xl overflow-hidden flex flex-col">
+          <div className="flex items-center px-3 border-b border-slate-700 bg-slate-800/50">
+             <Search className="w-4 h-4 text-slate-400" />
+             <input 
+               type="text" 
+               className="w-full bg-transparent border-none outline-none p-2.5 text-sm text-white placeholder:text-slate-500 font-sans" 
+               placeholder="폰트 검색..."
+               value={search}
+               onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+          <div className="max-h-[300px] overflow-y-auto p-1.5 flex flex-col gap-1">
+             {filteredFonts.length === 0 && <div className="py-6 text-center text-sm text-slate-500 font-sans">폰트를 찾을 수 없습니다.</div>}
+             {filteredFonts.map(f => (
+               <button
+                 key={f.value}
+                 onClick={() => { onChange(f.value); setOpen(false); setSearch(""); }}
+                 className={cn(
+                   "flex flex-col text-left px-3 py-3 rounded hover:bg-slate-700 transition-colors cursor-pointer w-full group border-b border-slate-700/50 last:border-0",
+                   f.value === value ? "bg-blue-900/40" : ""
+                 )}
+               >
+                 <div className="flex w-full items-center justify-between">
+                   <div className="flex flex-col w-full pr-2">
+                     <span className={cn(f.value, "text-[26px] text-white leading-tight mb-1 group-hover:text-blue-300 transition-colors")}>{f.preview}</span>
+                     <span className="text-[12px] text-slate-400 font-sans">{f.name}</span>
+                   </div>
+                   {f.value === value && <Check className="w-5 h-5 text-blue-400 shrink-0" />}
+                 </div>
+               </button>
+             ))}
+          </div>
+        </div>
+      )}
+      
+      {open && <div className="fixed inset-0 z-[90]" onClick={() => setOpen(false)} />}
+    </div>
+  );
+}
 
 const RIBBON_TYPES = [
   { id: 'bouquet', name: '꽃다발 38x400mm', width: 38, lace: 5, length: 400, marginTop: 80, marginBottom: 50, fontSize: 30 },
@@ -203,12 +300,29 @@ const parseRibbonLine = (text: string, baseId: string, rotatedIds: Set<string>):
   return nodes;
 };
 
+interface FontConfig {
+  ko: string; // Hangeul
+  en: string; // Alphanumeric
+  hj: string; // Hanja
+  sym: string; // Symbols
+}
+
+/** 
+ * Smart detection of character type
+ */
+const getCharType = (raw: string): keyof FontConfig => {
+  if (/[가-힣]/.test(raw)) return 'ko';  // Any Hangeul inside (like (주)) uses Ko font
+  if (/[\u4E00-\u9FFF]/.test(raw)) return 'hj';
+  if (/[A-Za-z0-9]/.test(raw)) return 'en';
+  return 'sym';
+};
+
 // ==========================================
 // Ribbon Canvas Component
 // ==========================================
 interface RibbonCanvasProps {
   text: string;
-  font: string;
+  fontConfig: FontConfig;
   ratioX: number;    // horizontal percentage scale
   ratioY: number;    // vertical percentage scale
   width: number;
@@ -220,12 +334,13 @@ interface RibbonCanvasProps {
   onCharClick: (id: string) => void;
   scaleRatio: number; // rendering scale
   zoom: number;      // current zoom level to compensate UI scale
+  spacing: number;   // manual gap percentage (0 = auto/spread)
   side?: 'left' | 'right'; 
 }
 
 const RibbonCanvas = ({ 
-  text, font, ratioX, ratioY, width, lace, length, marginTop, marginBottom, 
-  rotatedIds, onCharClick, scaleRatio, zoom, side = 'left'
+  text, fontConfig, ratioX, ratioY, width, lace, length, marginTop, marginBottom, 
+  rotatedIds, onCharClick, scaleRatio, zoom, spacing, side = 'left'
 }: RibbonCanvasProps) => {
   // Parse lines
   const lines = text.split('\n').filter(l => l.trim() !== '');
@@ -355,21 +470,25 @@ const RibbonCanvas = ({
                return sum + actualFontSize;
             }, 0);
             
+            const gapPX = spacing > 0 ? (actualFontSize * spacing / 100) : 0;
+            const totalRequiredHeight = requiredHeight + (nodes.length > 1 ? (nodes.length - 1) * gapPX : 0);
+            
             const availableHeight = Math.max(0, (length - marginTop - marginBottom) * scaleRatio);
             let squashRatio = 1;
-            if (requiredHeight > availableHeight && availableHeight > 0) {
-              squashRatio = availableHeight / requiredHeight;
+            if (totalRequiredHeight > availableHeight && availableHeight > 0) {
+              squashRatio = availableHeight / totalRequiredHeight;
             }
 
             return (
               <div 
                 key={lIdx} 
-                className={cn(font, "flex flex-col items-center shrink-0 w-max text-black font-bold whitespace-nowrap")}
+                className="flex flex-col items-center shrink-0 w-max text-black font-bold whitespace-nowrap"
                 style={{
-                  height: squashRatio < 1 ? `${requiredHeight}px` : '100%',
+                  height: squashRatio < 1 ? `${totalRequiredHeight}px` : (spacing === 0 ? '100%' : 'auto'),
                   transform: squashRatio < 1 ? `scaleY(${squashRatio})` : 'none',
                   transformOrigin: 'top center',
-                  justifyContent: nodes.length === 1 ? 'center' : 'space-between'
+                  justifyContent: nodes.length === 1 ? 'center' : (spacing === 0 ? 'space-between' : 'flex-start'),
+                  gap: spacing > 0 ? `${gapPX}px` : undefined
                 }}
               >
                 {nodes.map(node => {
@@ -383,9 +502,22 @@ const RibbonCanvas = ({
 
                   // Law 4: Fullwidth
                   if (node.type === 'fullwidth') {
+                    const charFont = fontConfig[getCharType(node.content)];
+                    const chars = node.content.split('');
                     return (
-                      <div key={node.id} className="flex justify-center items-center shrink-0" style={{ height: actualFontSize, width: nodeW }}>
-                        <span style={{ fontSize: `${actualFontSize * 0.85}px`, transform: `scaleX(${fontScaleX})`, display: 'inline-block', letterSpacing: '-0.1em' }}>{node.content}</span>
+                      <div key={node.id} className={cn("flex justify-center items-center shrink-0", charFont)} style={{ height: actualFontSize, width: nodeW }}>
+                         <div className="flex items-center justify-center">
+                           {chars.map((c, i) => (
+                             <span key={i} style={{ 
+                               fontSize: `${actualFontSize * 0.80}px`, 
+                               transform: `scaleX(${fontScaleX})`, 
+                               display: 'inline-block',
+                               marginLeft: i > 0 ? '-0.20em' : '0',
+                               fontWeight: 'bold',
+                               lineHeight: 1
+                             }}>{c}</span>
+                           ))}
+                         </div>
                       </div>
                     );
                   }
@@ -398,11 +530,12 @@ const RibbonCanvas = ({
                     return (
                       <div key={node.id} className={cn("flex flex-col items-center shrink-0 leading-none py-2", chars.length > 1 ? "justify-between" : "justify-center")} style={{ height: blockHeight + (actualFontSize * 0.5), width: nodeW }}>
                         {chars.map((c, i) => (
-                           <span key={i} style={{ 
-                             fontSize: `${nodeW * 0.65}px`, // 65% reduction as requested
+                           <span key={i} className={fontConfig[getCharType(c)]} style={{ 
+                             fontSize: `${actualFontSize * 0.65 * (1 + (fontScaleX - 1) * 0.5)}px`, 
                              lineHeight: 1,
                              display: 'inline-block',
-                             fontWeight: 'bold'
+                             fontWeight: 'bold',
+                             transform: `scaleX(${fontScaleX})`
                            }}>{c}</span>
                         ))}
                       </div>
@@ -420,22 +553,26 @@ const RibbonCanvas = ({
                       <div key={node.id} className="flex flex-row items-center justify-center shrink-0 py-2" style={{ height: blockHeight + (actualFontSize * 0.5), width: nodeW }}>
                          <div className={cn("flex flex-col items-center h-full flex-1", leftChars.length > 1 ? "justify-between" : "justify-center")}>
                            {leftChars.map((char, i) => (
-                             <div key={i} className="flex items-center justify-center shrink-0" style={{ height: blockHeight / maxLen, width: '100%' }}>
+                             <div key={i} className={cn("flex items-center justify-center shrink-0", fontConfig[getCharType(char)])} style={{ height: blockHeight / maxLen, width: '100%' }}>
                                <span style={{ 
-                                 fontSize: `${nodeW * 0.65 * 0.45}px`, // 65% of half width
+                                 fontSize: `${actualFontSize * 0.3 * (1 + (fontScaleX - 1) * 0.5)}px`, 
                                  display: 'inline-block',
-                                 lineHeight: 1
+                                 lineHeight: 1,
+                                 fontWeight: 'bold',
+                                 transform: `scaleX(${fontScaleX})`
                                }}>{char}</span>
                              </div>
                            ))}
                          </div>
                          <div className={cn("flex flex-col items-center h-full flex-1", rightChars.length > 1 ? "justify-between" : "justify-center")}>
                            {rightChars.map((char, i) => (
-                             <div key={i} className="flex items-center justify-center shrink-0" style={{ height: blockHeight / maxLen, width: '100%' }}>
+                             <div key={i} className={cn("flex items-center justify-center shrink-0", fontConfig[getCharType(char)])} style={{ height: blockHeight / maxLen, width: '100%' }}>
                                <span style={{ 
-                                 fontSize: `${nodeW * 0.65 * 0.45}px`, // 65% of half width
+                                 fontSize: `${actualFontSize * 0.3 * (1 + (fontScaleX - 1) * 0.5)}px`, 
                                  display: 'inline-block',
-                                 lineHeight: 1
+                                 lineHeight: 1,
+                                 fontWeight: 'bold',
+                                 transform: `scaleX(${fontScaleX})`
                                }}>{char}</span>
                              </div>
                            ))}
@@ -445,10 +582,11 @@ const RibbonCanvas = ({
                   }
 
                   // Law 1: Normal / 90-degree Rotation
+                  const charFont = fontConfig[getCharType(node.content)];
                   return (
                     <div 
                       key={node.id} 
-                      className="cursor-pointer hover:text-blue-600 transition-colors flex justify-center items-center shrink-0 leading-none"
+                      className={cn(charFont, "cursor-pointer hover:text-blue-600 transition-colors flex justify-center items-center shrink-0 leading-none")}
                       style={{ height: nodeH, width: nodeW }}
                       onClick={() => onCharClick(node.id)}
                     >
@@ -488,22 +626,99 @@ export default function App() {
 
   // Left Ribbon State
   const [leftText, setLeftText] = useState('祝發展');
-  const [leftFont, setLeftFont] = useState(FONTS[3].value);
+  const [leftFontConfig, setLeftFontConfig] = useState<FontConfig>({
+    ko: 'font-chosun',
+    en: 'font-chosun',
+    hj: 'font-chosun',
+    sym: 'font-noto-sans'
+  });
   const [leftRatioX, setLeftRatioX] = useState(100);
   const [leftRatioY, setLeftRatioY] = useState(100);
   const [leftRotated, setLeftRotated] = useState<Set<string>>(new Set());
 
+  const [leftSpacing, setLeftSpacing] = useState(0); // 0 = auto
+
   // Right Ribbon State
   const [rightText, setRightText] = useState('(주)디자인스튜디오 대표이사 [홍길동]');
-  const [rightFont, setRightFont] = useState(FONTS[3].value);
+  const [rightFontConfig, setRightFontConfig] = useState<FontConfig>({
+    ko: 'font-chosun',
+    en: 'font-chosun',
+    hj: 'font-chosun',
+    sym: 'font-noto-sans'
+  });
   const [rightRatioX, setRightRatioX] = useState(100);
   const [rightRatioY, setRightRatioY] = useState(100);
   const [rightRotated, setRightRotated] = useState<Set<string>>(new Set());
+  const [rightSpacing, setRightSpacing] = useState(0); // 0 = auto
 
   // UI State
   const [activeSide, setActiveSide] = useState<'left'|'right'>('left');
   const [zoom, setZoom] = useState(0.4);
   const [phraseCategory, setPhraseCategory] = useState(0);
+  const [fontWizardMode, setFontWizardMode] = useState<keyof FontConfig>('ko');
+  const [fontWizardModeRight, setFontWizardModeRight] = useState<keyof FontConfig>('ko');
+
+  // Font Manager State
+  const [customFontItems, setCustomFontItems] = useState<CustomFontInfo[]>([]);
+  const [hiddenFonts, setHiddenFonts] = useState<string[]>([]);
+  const [customStyles, setCustomStyles] = useState<{id: string, css: string}[]>([]);
+  const [isFontManagerOpen, setIsFontManagerOpen] = useState(false);
+
+  const loadFontSettings = async () => {
+    const hidden = getHiddenFonts();
+    setHiddenFonts(hidden || []);
+    
+    try {
+      const custom = await getAllCustomFonts();
+      setCustomFontItems(custom);
+      
+      const styles: {id: string, css: string}[] = [];
+      for (const font of custom) {
+         if (font.source === 'local' && font.blob) {
+           const url = URL.createObjectURL(font.blob);
+           styles.push({
+             id: font.id,
+             css: `
+               @font-face {
+                 font-family: '${font.fontFamily}';
+                 src: url('${url}');
+               }
+               .${font.id} { font-family: '${font.fontFamily}', sans-serif !important; }
+             `
+           });
+         } else if (font.source === 'web' && font.webUrl) {
+           styles.push({
+             id: font.id,
+             css: `
+               @import url('${font.webUrl}');
+               .${font.id} { font-family: ${font.fontFamily} !important; }
+             `
+           });
+         }
+      }
+      setCustomStyles(styles);
+    } catch (e) {
+      console.error("Failed to load custom fonts", e);
+    }
+  };
+
+  useEffect(() => {
+    loadFontSettings();
+  }, []);
+
+  const extendedFonts = useMemo(() => {
+    const custom: FontItem[] = customFontItems.map(f => ({
+      value: f.id,
+      name: f.name,
+      langs: ['ko', 'hj', 'en', 'sym'],
+      preview: '祝發展 謹弔'
+    }));
+    return [...custom, ...FONTS];
+  }, [customFontItems]);
+
+  const availableFonts = useMemo(() => {
+    return extendedFonts.filter(f => !hiddenFonts.includes(f.value));
+  }, [extendedFonts, hiddenFonts]);
 
   // Auto-Zoom Calculation
   useEffect(() => {
@@ -647,22 +862,70 @@ export default function App() {
             value={leftText} 
             onChange={e => setLeftText(e.target.value)}
             onFocus={() => setActiveSide('left')}
-            className={cn("w-full p-2 rounded-lg text-sm leading-tight focus:ring-2 bg-slate-800 border-slate-700 text-white outline-none", leftFont)}
+            className="w-full p-2 rounded-lg text-sm leading-tight focus:ring-2 bg-slate-800 border-slate-700 text-white outline-none"
             placeholder="경조사 입력"
           />
-          <div className="flex flex-col gap-2">
-            <select value={leftFont} onChange={e => setLeftFont(e.target.value)} className="w-full p-2 rounded-lg text-sm bg-slate-800 border-slate-700 text-white">
-              {FONTS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
-            </select>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="flex bg-slate-800 rounded-lg overflow-hidden border border-slate-700">
-                 <span className="bg-slate-700 text-xs text-slate-300 px-2 flex items-center justify-center shrink-0 w-12">가로</span>
-                 <input type="number" value={leftRatioX} onChange={e => setLeftRatioX(Number(e.target.value))} className="w-full p-1.5 text-sm text-center font-mono bg-transparent outline-none text-white" />
+          <div className="flex flex-col gap-3 p-3 bg-slate-800/80 rounded-xl border border-slate-700">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-blue-400">🧙 폰트 마법사</span>
+              <div className="flex gap-1 overflow-x-auto">
+                {(['ko', 'hj', 'en', 'sym'] as const).map(type => (
+                  <button 
+                    key={type}
+                    onClick={() => setFontWizardMode(type)}
+                    className={cn(
+                      "text-[10px] px-2 py-1 rounded transition-all whitespace-nowrap",
+                      fontWizardMode === type ? "bg-blue-600 text-white shadow-lg" : "bg-slate-700 text-slate-400 hover:text-slate-200"
+                    )}
+                  >
+                    {type === 'ko' ? '한글' : type === 'hj' ? '한자' : type === 'en' ? '영/수' : '기호'}
+                  </button>
+                ))}
               </div>
-              <div className="flex bg-slate-800 rounded-lg overflow-hidden border border-slate-700">
-                 <span className="bg-slate-700 text-xs text-slate-300 px-2 flex items-center justify-center shrink-0 w-12">세로</span>
-                 <input type="number" value={leftRatioY} onChange={e => setLeftRatioY(Number(e.target.value))} className="w-full p-1.5 text-sm text-center font-mono bg-transparent outline-none text-white" />
+            </div>
+            
+            <div className="flex gap-2 items-center w-full">
+              <div className="flex-1 w-full relative">
+                <FontSelector 
+                  value={leftFontConfig[fontWizardMode]} 
+                  onChange={val => setLeftFontConfig(prev => ({ ...prev, [fontWizardMode]: val }))} 
+                  mode={fontWizardMode} 
+                  fonts={availableFonts}
+                />
               </div>
+              <button 
+                 onClick={() => setIsFontManagerOpen(true)}
+                 title="내 폰트 추가 및 관리하기"
+                 className="bg-slate-900 border border-slate-700 rounded-lg w-10 flex shrink-0 items-center justify-center hover:bg-slate-700 transition"
+                 style={{ height: '38px' }}
+              >
+                 <Wrench className="w-4 h-4 text-slate-400" />
+              </button>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-2 mt-1">
+              <div className="flex bg-slate-900 rounded-lg overflow-hidden border border-slate-700">
+                 <span className="bg-slate-700 text-[10px] text-slate-300 px-2 flex items-center justify-center shrink-0 w-12">가로%</span>
+                 <input type="number" value={leftRatioX} onChange={e => setLeftRatioX(Number(e.target.value))} className="w-full p-1.5 text-xs text-center font-mono bg-transparent outline-none text-white" />
+              </div>
+              <div className="flex bg-slate-900 rounded-lg overflow-hidden border border-slate-700">
+                 <span className="bg-slate-700 text-[10px] text-slate-300 px-2 flex items-center justify-center shrink-0 w-12">세로%</span>
+                 <input type="number" value={leftRatioY} onChange={e => setLeftRatioY(Number(e.target.value))} className="w-full p-1.5 text-xs text-center font-mono bg-transparent outline-none text-white" />
+              </div>
+            </div>
+            
+            <div className="mt-1">
+              <div className="flex justify-between items-center mb-1">
+                <span className="text-[10px] text-slate-300">자간 (0=자동)</span>
+                <span className="text-[10px] font-mono text-blue-400">{leftSpacing === 0 ? 'Auto' : `${leftSpacing}%`}</span>
+              </div>
+              <input 
+                type="range" 
+                min="0" max="100" step="5"
+                value={leftSpacing} 
+                onChange={e => setLeftSpacing(Number(e.target.value))} 
+                className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500" 
+              />
             </div>
           </div>
         </div>
@@ -697,22 +960,69 @@ export default function App() {
             value={rightText} 
             onChange={e => setRightText(e.target.value)}
             onFocus={() => setActiveSide('right')}
-            className={cn("w-full p-2 rounded-lg text-sm leading-tight focus:ring-2 bg-slate-800 border-slate-700 text-white outline-none", rightFont)}
+            className="w-full p-2 rounded-lg text-sm leading-tight focus:ring-2 bg-slate-800 border-slate-700 text-white outline-none"
             placeholder="보내는이 입력"
           />
-          <div className="flex flex-col gap-2">
-            <select value={rightFont} onChange={e => setRightFont(e.target.value)} className="w-full p-2 rounded-lg text-sm bg-slate-800 border-slate-700 text-white">
-              {FONTS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
-            </select>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="flex bg-slate-800 rounded-lg overflow-hidden border border-slate-700">
-                 <span className="bg-slate-700 text-xs text-slate-300 px-2 flex items-center justify-center shrink-0 w-12">가로</span>
-                 <input type="number" value={rightRatioX} onChange={e => setRightRatioX(Number(e.target.value))} className="w-full p-1.5 text-sm text-center font-mono bg-transparent outline-none text-white" />
+          <div className="flex flex-col gap-3 p-3 bg-slate-800/80 rounded-xl border border-slate-700">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-blue-400">🧙 폰트 마법사</span>
+              <div className="flex gap-1 overflow-x-auto">
+                {(['ko', 'hj', 'en', 'sym'] as const).map(type => (
+                  <button 
+                    key={type}
+                    onClick={() => setFontWizardModeRight(type)}
+                    className={cn(
+                      "text-[10px] px-2 py-1 rounded transition-all whitespace-nowrap",
+                      fontWizardModeRight === type ? "bg-blue-600 text-white shadow-lg" : "bg-slate-700 text-slate-400 hover:text-slate-200"
+                    )}
+                  >
+                    {type === 'ko' ? '한글' : type === 'hj' ? '한자' : type === 'en' ? '영/수' : '기호'}
+                  </button>
+                ))}
               </div>
-              <div className="flex bg-slate-800 rounded-lg overflow-hidden border border-slate-700">
-                 <span className="bg-slate-700 text-xs text-slate-300 px-2 flex items-center justify-center shrink-0 w-12">세로</span>
-                 <input type="number" value={rightRatioY} onChange={e => setRightRatioY(Number(e.target.value))} className="w-full p-1.5 text-sm text-center font-mono bg-transparent outline-none text-white" />
+            </div>
+            <div className="flex gap-2 items-center w-full">
+              <div className="flex-1 w-full relative">
+                <FontSelector 
+                  value={rightFontConfig[fontWizardModeRight]} 
+                  onChange={val => setRightFontConfig(prev => ({ ...prev, [fontWizardModeRight]: val }))} 
+                  mode={fontWizardModeRight} 
+                  fonts={availableFonts}
+                />
               </div>
+              <button 
+                 onClick={() => setIsFontManagerOpen(true)}
+                 title="내 폰트 추가 및 관리하기"
+                 className="bg-slate-900 border border-slate-700 rounded-lg w-10 flex shrink-0 items-center justify-center hover:bg-slate-700 transition"
+                 style={{ height: '38px' }}
+              >
+                 <Wrench className="w-4 h-4 text-slate-400" />
+              </button>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-2 mt-1">
+              <div className="flex bg-slate-900 rounded-lg overflow-hidden border border-slate-700">
+                 <span className="bg-slate-700 text-[10px] text-slate-300 px-2 flex items-center justify-center shrink-0 w-12">가로%</span>
+                 <input type="number" value={rightRatioX} onChange={e => setRightRatioX(Number(e.target.value))} className="w-full p-1.5 text-xs text-center font-mono bg-transparent outline-none text-white" />
+              </div>
+              <div className="flex bg-slate-900 rounded-lg overflow-hidden border border-slate-700">
+                 <span className="bg-slate-700 text-[10px] text-slate-300 px-2 flex items-center justify-center shrink-0 w-12">세로%</span>
+                 <input type="number" value={rightRatioY} onChange={e => setRightRatioY(Number(e.target.value))} className="w-full p-1.5 text-xs text-center font-mono bg-transparent outline-none text-white" />
+              </div>
+            </div>
+
+            <div className="mt-1">
+              <div className="flex justify-between items-center mb-1">
+                <span className="text-[10px] text-slate-300">자간 (0=자동)</span>
+                <span className="text-[10px] font-mono text-blue-400">{rightSpacing === 0 ? 'Auto' : `${rightSpacing}%`}</span>
+              </div>
+              <input 
+                type="range" 
+                min="0" max="100" step="5"
+                value={rightSpacing} 
+                onChange={e => setRightSpacing(Number(e.target.value))} 
+                className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500" 
+              />
             </div>
           </div>
         </div>
@@ -724,16 +1034,16 @@ export default function App() {
         {/* Canvas Area */}
         <div className="flex gap-24 transition-transform duration-300" style={{ transform: `scale(${zoom})`, transformOrigin: 'top center' }}>
           <RibbonCanvas 
-            text={leftText} font={leftFont} ratioX={leftRatioX} ratioY={leftRatioY} lace={lace}
+            text={leftText} fontConfig={leftFontConfig} ratioX={leftRatioX} ratioY={leftRatioY} lace={lace}
             width={width} length={length} marginTop={marginTop} marginBottom={marginBottom}
             rotatedIds={leftRotated} onCharClick={(id) => toggleRotation(id, 'left')}
-            scaleRatio={2} zoom={zoom} side="left"
+            scaleRatio={2} zoom={zoom} spacing={leftSpacing} side="left"
           />
           <RibbonCanvas 
-            text={rightText} font={rightFont} ratioX={rightRatioX} ratioY={rightRatioY} lace={lace}
+            text={rightText} fontConfig={rightFontConfig} ratioX={rightRatioX} ratioY={rightRatioY} lace={lace}
             width={width} length={length} marginTop={marginTop} marginBottom={marginBottom}
             rotatedIds={rightRotated} onCharClick={(id) => toggleRotation(id, 'right')}
-            scaleRatio={2} zoom={zoom} side="right"
+            scaleRatio={2} zoom={zoom} spacing={rightSpacing} side="right"
           />
         </div>
 
