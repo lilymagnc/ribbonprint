@@ -530,7 +530,7 @@ const RibbonCanvas = ({
                            onClick={() => onCharClick(node.id)}
                          >
                            {chars.map((c, i) => (
-                              <span key={i} style={{ 
+                              <span key={i} className={fontConfig[getCharType(c)]} style={{ 
                                 fontSize: `${actualFontSize * 0.80}px`, 
                                 display: 'inline-block',
                                 fontWeight: 'bold',
@@ -552,7 +552,7 @@ const RibbonCanvas = ({
                       >
                          <div className="flex items-center justify-center" style={{ transform: `scaleX(${fontScaleX})` }}>
                            {chars.map((c, i) => (
-                             <span key={i} style={{ 
+                             <span key={i} className={fontConfig[getCharType(c)]} style={{ 
                                fontSize: `${actualFontSize * 0.80}px`, 
                                display: 'inline-block',
                                marginLeft: i > 0 ? '-0.20em' : '0',
@@ -646,7 +646,7 @@ const RibbonCanvas = ({
                          <div className={cn("flex flex-col items-center h-full flex-1", leftChars.length > 1 ? "justify-between" : "justify-center")}>
                            {leftChars.map((char, i) => (
                              <div key={i} className={cn("flex items-center justify-center shrink-0", fontConfig[getCharType(char)])} style={{ height: blockHeight / maxLen, width: '100%' }}>
-                               <span style={{ 
+                               <span className={fontConfig[getCharType(char)]} style={{ 
                                  fontSize: `${actualFontSize * 0.45 * (1 + (fontScaleX - 1) * 0.5)}px`, 
                                  display: 'inline-block',
                                  lineHeight: 1,
@@ -659,7 +659,7 @@ const RibbonCanvas = ({
                          <div className={cn("flex flex-col items-center h-full flex-1", rightChars.length > 1 ? "justify-between" : "justify-center")}>
                            {rightChars.map((char, i) => (
                              <div key={i} className={cn("flex items-center justify-center shrink-0", fontConfig[getCharType(char)])} style={{ height: blockHeight / maxLen, width: '100%' }}>
-                               <span style={{ 
+                               <span className={fontConfig[getCharType(char)]} style={{ 
                                  fontSize: `${actualFontSize * 0.45 * (1 + (fontScaleX - 1) * 0.5)}px`, 
                                  display: 'inline-block',
                                  lineHeight: 1,
@@ -678,11 +678,11 @@ const RibbonCanvas = ({
                   return (
                     <div 
                       key={node.id} 
-                      className={cn(charFont, "cursor-pointer hover:text-blue-600 transition-colors flex justify-center items-center shrink-0 leading-none")}
+                      className="cursor-pointer hover:text-blue-600 transition-colors flex justify-center items-center shrink-0 leading-none"
                       style={{ height: nodeH, width: nodeW }}
                       onClick={() => onCharClick(node.id)}
                     >
-                      <span style={{ 
+                      <span className={charFont} style={{ 
                         fontSize: nodeH,
                         transform: `scaleX(${fontScaleX}) ${node.isRotated ? 'rotate(90deg)' : ''}`,
                         display: 'inline-block'
