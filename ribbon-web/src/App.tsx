@@ -280,13 +280,16 @@ const parseRibbonLine = (text: string, baseId: string, rotatedIds: Set<string>):
 
     if (match[1] && match[2]) {
       // [left/right]
-      nodes.push({ type: 'split', content: raw, leftContent: match[1], rightContent: match[2], id });
+      const isRotated = rotatedIds.has(id);
+      nodes.push({ type: 'split', content: raw, leftContent: match[1], rightContent: match[2], id, isRotated });
     } else if (match[3]) {
       // [bracket]
-      nodes.push({ type: 'bracket', content: match[3], id });
+      const isRotated = rotatedIds.has(id);
+      nodes.push({ type: 'bracket', content: match[3], id, isRotated });
     } else if (match[4]) {
       // (주)
-      nodes.push({ type: 'fullwidth', content: raw, id });
+      const isRotated = rotatedIds.has(id);
+      nodes.push({ type: 'fullwidth', content: raw, id, isRotated });
     } else if (match[5]) {
       // space
       nodes.push({ type: 'space', content: raw, id });
@@ -454,18 +457,29 @@ const RibbonCanvas = ({
             
             // Mathematically calculate required height (Full Fit logic)
             const requiredHeight = nodes.reduce((sum, n) => {
-               if (n.type === 'space') return sum + (actualFontSize * 0.65);
+               if (n.type === 'space') return sum + (actualFontSize * 0.7);
 
-               // Add buffer spacing for bracketed/split nodes (Law 2 & 3)
-               const nodeSpacing = (n.type === 'bracket' || n.type === 'split') ? (actualFontSize * 0.5) : 0;
+               // Buffer and scaling factor for multi-line nodes
+               const nodePadding = (actualFontSize * 0.6); // Increased safety margin
 
                if (n.type === 'split') {
                  const leftL = n.leftContent?.length || 0;
                  const rightL = n.rightContent?.length || 0;
-                 return sum + (Math.max(leftL, rightL) * actualFontSize * 0.65) + nodeSpacing;
+                 if (n.isRotated) {
+                    // Rotated split: single column + 1 space gap + safety margin
+                    return sum + ((leftL + rightL + 1) * actualFontSize * 0.7) + nodePadding;
+                 }
+                 return sum + (Math.max(leftL, rightL) * actualFontSize * 0.7) + nodePadding;
                }
                if (n.type === 'bracket') {
-                 return sum + (n.content.length * actualFontSize * 0.65) + nodeSpacing;
+                 return sum + (n.content.length * actualFontSize * 0.7) + nodePadding;
+               }
+               if (n.type === 'fullwidth') {
+                 if (n.isRotated) {
+                   const contentL = n.content.length;
+                   return sum + (contentL * actualFontSize * 0.8) + (actualFontSize * 0.5);
+                 }
+                 return sum + actualFontSize;
                }
                return sum + actualFontSize;
             }, 0);
@@ -504,13 +518,42 @@ const RibbonCanvas = ({
                   if (node.type === 'fullwidth') {
                     const charFont = fontConfig[getCharType(node.content)];
                     const chars = node.content.split('');
+                    
+                    // Rotated: single column like bracket
+                    if (node.isRotated) {
+                       const blockHeight = chars.length * actualFontSize * 0.8;
+                       return (
+                         <div 
+                           key={node.id} 
+                           className={cn("flex flex-col items-center justify-between shrink-0 py-1 cursor-pointer hover:text-blue-600 transition-colors", charFont)} 
+                           style={{ height: blockHeight + (actualFontSize * 0.5), width: nodeW }}
+                           onClick={() => onCharClick(node.id)}
+                         >
+                           {chars.map((c, i) => (
+                              <span key={i} style={{ 
+                                fontSize: `${actualFontSize * 0.80}px`, 
+                                display: 'inline-block',
+                                fontWeight: 'bold',
+                                lineHeight: 1,
+                                transform: `scaleX(${fontScaleX}) rotate(90deg)`
+                              }}>{c}</span>
+                           ))}
+                         </div>
+                       );
+                    }
+
+                    // Normal: upright
                     return (
-                      <div key={node.id} className={cn("flex justify-center items-center shrink-0", charFont)} style={{ height: actualFontSize, width: nodeW }}>
-                         <div className="flex items-center justify-center">
+                      <div 
+                        key={node.id} 
+                        className={cn("flex justify-center items-center shrink-0 cursor-pointer hover:text-blue-600 transition-colors", charFont)} 
+                        style={{ height: actualFontSize, width: nodeW }}
+                        onClick={() => onCharClick(node.id)}
+                      >
+                         <div className="flex items-center justify-center" style={{ transform: `scaleX(${fontScaleX})` }}>
                            {chars.map((c, i) => (
                              <span key={i} style={{ 
                                fontSize: `${actualFontSize * 0.80}px`, 
-                               transform: `scaleX(${fontScaleX})`, 
                                display: 'inline-block',
                                marginLeft: i > 0 ? '-0.20em' : '0',
                                fontWeight: 'bold',
@@ -525,17 +568,25 @@ const RibbonCanvas = ({
                   // Law 2: Special Bracket Multi-line (e.g. [HongGilDong])
                   if (node.type === 'bracket') {
                     const chars = node.content.split('');
-                    const blockHeight = chars.length * actualFontSize * 0.65; 
+                    const blockHeight = chars.length * actualFontSize * 0.7; // increased from 0.65
                     
                     return (
-                      <div key={node.id} className={cn("flex flex-col items-center shrink-0 leading-none py-2", chars.length > 1 ? "justify-between" : "justify-center")} style={{ height: blockHeight + (actualFontSize * 0.5), width: nodeW }}>
+                      <div 
+                        key={node.id} 
+                        className={cn("flex flex-col items-center shrink-0 leading-none py-1 cursor-pointer hover:text-blue-600 transition-colors", chars.length > 1 ? "justify-between" : "justify-center")} 
+                        style={{ 
+                          height: blockHeight + (actualFontSize * 0.6), 
+                          width: nodeW
+                        }}
+                        onClick={() => onCharClick(node.id)}
+                      >
                         {chars.map((c, i) => (
                            <span key={i} className={fontConfig[getCharType(c)]} style={{ 
-                             fontSize: `${actualFontSize * 0.65 * (1 + (fontScaleX - 1) * 0.5)}px`, 
+                             fontSize: `${actualFontSize * 0.7 * (1 + (fontScaleX - 1) * 0.5)}px`, 
                              lineHeight: 1,
                              display: 'inline-block',
                              fontWeight: 'bold',
-                             transform: `scaleX(${fontScaleX})`
+                             transform: `scaleX(${fontScaleX}) ${node.isRotated ? 'rotate(90deg)' : ''}`
                            }}>{c}</span>
                         ))}
                       </div>
@@ -547,15 +598,56 @@ const RibbonCanvas = ({
                     const leftChars = node.leftContent?.split('') || [];
                     const rightChars = node.rightContent?.split('') || [];
                     const maxLen = Math.max(leftChars.length, rightChars.length);
-                    const blockHeight = maxLen * actualFontSize * 0.65;
 
+                    // Rotated: single column like bracket, [] size (70%), with space between left/right
+                    if (node.isRotated) {
+                      const totalChars = leftChars.length + rightChars.length;
+                      const blockHeight = (totalChars + 1) * actualFontSize * 0.7; // +1 space
+                      return (
+                        <div 
+                          key={node.id} 
+                          className="flex flex-col items-center shrink-0 leading-none py-1 cursor-pointer hover:text-blue-600 transition-colors justify-between" 
+                          style={{ height: blockHeight + (actualFontSize * 0.6), width: nodeW }}
+                          onClick={() => onCharClick(node.id)}
+                        >
+                          {leftChars.map((c, i) => (
+                            <span key={`l${i}`} className={fontConfig[getCharType(c)]} style={{ 
+                              fontSize: `${actualFontSize * 0.7 * (1 + (fontScaleX - 1) * 0.5)}px`, 
+                              lineHeight: 1,
+                              display: 'inline-block',
+                              fontWeight: 'bold',
+                              transform: `scaleX(${fontScaleX}) rotate(90deg)`
+                            }}>{c}</span>
+                          ))}
+                          {/* / → space gap */}
+                          <div style={{ height: `${actualFontSize * 0.7}px` }} />
+                          {rightChars.map((c, i) => (
+                            <span key={`r${i}`} className={fontConfig[getCharType(c)]} style={{ 
+                              fontSize: `${actualFontSize * 0.7 * (1 + (fontScaleX - 1) * 0.5)}px`, 
+                              lineHeight: 1,
+                              display: 'inline-block',
+                              fontWeight: 'bold',
+                              transform: `scaleX(${fontScaleX}) rotate(90deg)`
+                            }}>{c}</span>
+                          ))}
+                        </div>
+                      );
+                    }
+
+                    // Normal: two parallel columns
+                    const blockHeight = maxLen * actualFontSize * 0.7; // increased
                     return (
-                      <div key={node.id} className="flex flex-row items-center justify-center shrink-0 py-2" style={{ height: blockHeight + (actualFontSize * 0.5), width: nodeW }}>
+                      <div 
+                        key={node.id} 
+                        className="flex flex-row items-center justify-center shrink-0 py-1 cursor-pointer hover:text-blue-600 transition-colors" 
+                        style={{ height: blockHeight + (actualFontSize * 0.6), width: nodeW }}
+                        onClick={() => onCharClick(node.id)}
+                      >
                          <div className={cn("flex flex-col items-center h-full flex-1", leftChars.length > 1 ? "justify-between" : "justify-center")}>
                            {leftChars.map((char, i) => (
                              <div key={i} className={cn("flex items-center justify-center shrink-0", fontConfig[getCharType(char)])} style={{ height: blockHeight / maxLen, width: '100%' }}>
                                <span style={{ 
-                                 fontSize: `${actualFontSize * 0.3 * (1 + (fontScaleX - 1) * 0.5)}px`, 
+                                 fontSize: `${actualFontSize * 0.45 * (1 + (fontScaleX - 1) * 0.5)}px`, 
                                  display: 'inline-block',
                                  lineHeight: 1,
                                  fontWeight: 'bold',
@@ -568,7 +660,7 @@ const RibbonCanvas = ({
                            {rightChars.map((char, i) => (
                              <div key={i} className={cn("flex items-center justify-center shrink-0", fontConfig[getCharType(char)])} style={{ height: blockHeight / maxLen, width: '100%' }}>
                                <span style={{ 
-                                 fontSize: `${actualFontSize * 0.3 * (1 + (fontScaleX - 1) * 0.5)}px`, 
+                                 fontSize: `${actualFontSize * 0.45 * (1 + (fontScaleX - 1) * 0.5)}px`, 
                                  display: 'inline-block',
                                  lineHeight: 1,
                                  fontWeight: 'bold',
@@ -766,7 +858,7 @@ export default function App() {
       // Must match RibbonCanvas baseId pattern: 'L' + index
       const nodes = parseRibbonLine(line, `L${lIdx}`, new Set());
       nodes.forEach(n => {
-        if (n.type === 'char') newRotated.add(n.id);
+        if (n.type === 'char' || n.type === 'fullwidth' || n.type === 'bracket' || n.type === 'split') newRotated.add(n.id);
       });
     });
     if (side === 'left') setLeftRotated(newRotated);
@@ -1118,6 +1210,21 @@ export default function App() {
 
       </aside>
 
+      {/* Inject custom font styles */}
+      <style>
+        {customStyles.map(s => s.css).join('\n')}
+      </style>
+
+      {/* Font Manager Dialog */}
+      <FontManagerDialog 
+        isOpen={isFontManagerOpen} 
+        onClose={() => {
+          setIsFontManagerOpen(false);
+          loadFontSettings();
+        }} 
+        baseFonts={FONTS}
+        onSettingsChanged={loadFontSettings}
+      />
     </div>
   );
 }
