@@ -5,7 +5,9 @@ import {
   Ruler, 
   Type,
   Maximize2,
-  Minimize2
+  Minimize2,
+  RotateCw,
+  Undo2
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -41,15 +43,118 @@ const RIBBON_TYPES = [
   { id: 'celebration_3', name: '축화 3단 165x2200mm', width: 165, lace: 23, length: 2200, marginTop: 400, marginBottom: 300, fontSize: 130 },
 ];
 
-const PHRASE_BANK = [
-  '祝 發 展',
-  '祝 開 業',
-  '祝 結 婚',
-  '謹 弔',
-  '祝 移 轉',
-  '祝 創 立',
-  '祝 就 任',
-  '祝 昇 進',
+const PHRASE_CATEGORIES = [
+  {
+    name: '🎂 생일/회갑/칠순',
+    phrases: [
+      { text: '祝生日', desc: '축생일' }, { text: '祝生辰', desc: '축생신' }, { text: '祝華甲', desc: '축화갑(60)' },
+      { text: '祝壽宴', desc: '축수연(60)' }, { text: '祝回甲', desc: '축회갑(60)' }, { text: '祝古稀', desc: '축고희(70)' },
+      { text: '祝七旬', desc: '축칠순(70)' }, { text: '祝喜壽', desc: '축희수(77)' }, { text: '祝八旬', desc: '축팔순(80)' },
+      { text: '祝傘壽', desc: '축산수(80)' }, { text: '祝米壽', desc: '축미수(88)' }, { text: '祝白壽', desc: '축백수(99)' },
+      { text: 'Happy Birthday!', desc: '생일축하' }
+    ]
+  },
+  {
+    name: '🚀 승진/취임/영전',
+    phrases: [
+      { text: '祝昇進', desc: '축승진' }, { text: '祝榮轉', desc: '축영전' }, { text: '祝就任', desc: '축취임' },
+      { text: '祝轉任', desc: '축전임' }, { text: '祝移任', desc: '축이임' }, { text: '祝遷任', desc: '축천임' },
+      { text: '祝轉役', desc: '축전역' }, { text: '祝榮進', desc: '축영진' }, { text: '祝選任', desc: '축선임' },
+      { text: '祝重任', desc: '축중임' }, { text: '祝連任', desc: '축연임' }, { text: 'Congratulations on your promotion', desc: '승진축하' }
+    ]
+  },
+  {
+    name: '🏢 개업/창립/이전',
+    phrases: [
+      { text: '祝發展', desc: '축발전' }, { text: '祝開業', desc: '축개업' }, { text: '祝盛業', desc: '축성업' },
+      { text: '祝繁榮', desc: '축번영' }, { text: '祝創立', desc: '축창립' }, { text: '祝設立', desc: '축설립' },
+      { text: '祝創設', desc: '축창설' }, { text: '祝創刊', desc: '축창간' }, { text: '祝移轉', desc: '축이전' },
+      { text: '祝開院', desc: '축개원' }, { text: '祝開館', desc: '축개관' }, { text: '祝開場', desc: '축개장' },
+      { text: '祝開店', desc: '축개점' }, { text: 'Congratulations on your new business', desc: '개업축하' }
+    ]
+  },
+  {
+    name: '💍 결혼/기념일',
+    phrases: [
+      { text: '祝約婚', desc: '축약혼' }, { text: '祝結婚', desc: '축결혼(男)' }, { text: '祝華婚', desc: '축화혼(女)' },
+      { text: '祝成婚', desc: '축성혼' }, { text: '紙婚式', desc: '지혼식(1)' }, { text: '常婚式', desc: '상혼식(2)' },
+      { text: '菓婚式', desc: '과혼식(3)' }, { text: '革婚式', desc: '혁혼식(4)' }, { text: '木婚式', desc: '목혼식(5)' },
+      { text: '花婚式', desc: '화혼식(7)' }, { text: '祝錫婚式', desc: '축석혼(10)' }, { text: '痲婚式', desc: '마혼식(12)' },
+      { text: '祝銅婚式', desc: '축동혼(15)' }, { text: '祝陶婚式', desc: '축도혼(20)' }, { text: '祝銀婚式', desc: '축은혼식(25)' },
+      { text: '祝眞珠婚式', desc: '축진주혼식' }, { text: '祝珊瑚婚식', desc: '축산호혼식' }, { text: '祝錄玉婚式', desc: '축녹옥혼식' },
+      { text: '祝紅玉婚式', desc: '축홍옥혼식' }, { text: '祝金婚式', desc: '축금혼식(50)' }, { text: '祝金剛婚式', desc: '축금강혼식(60)' },
+      { text: 'A Happy Marriage', desc: '행복한결혼' }
+    ]
+  },
+  {
+    name: '🖤 죽음/애도',
+    phrases: [
+      { text: '謹弔', desc: '근조' }, { text: '追慕', desc: '추모' }, { text: '追悼', desc: '추도' },
+      { text: '哀悼', desc: '애도' }, { text: '弔意', desc: '조의' }, { text: '尉靈', desc: '위령' },
+      { text: '謹悼', desc: '근도' }, { text: '賻儀', desc: '부의' }, { text: '冥福', desc: '명복' },
+      { text: '故人의 冥福을 빕니다', desc: '고인의 명복' }, { text: '삼가 故人의 冥福을 빕니다', desc: '삼가 명복' },
+      { text: 'You have my condolences', desc: '애도' }, { text: 'Please accept my deepest condolences', desc: '깊은애도' }
+    ]
+  },
+  {
+    name: '🏢 준공/기공/개통',
+    phrases: [
+      { text: '祝起工', desc: '축기공' }, { text: '祝上樑', desc: '축상량' }, { text: '祝竣工', desc: '축준공' },
+      { text: '祝開通', desc: '축개통' }, { text: '祝落成', desc: '축낙성' }
+    ]
+  },
+  {
+    name: '👶 출산/탄생',
+    phrases: [
+      { text: '祝順産', desc: '축순산' }, { text: '祝出産', desc: '축출산' }, { text: '祝誕生', desc: '축탄생' },
+      { text: '祝得男', desc: '축득남' }, { text: '祝得女', desc: '축득녀' }, { text: '祝公主誕生', desc: '축공주탄생' },
+      { text: '祝王子誕生', desc: '축왕자탄생' }, { text: 'Congratulations on your new baby', desc: '출산축하' }
+    ]
+  },
+  {
+    name: '📚 창간/출판',
+    phrases: [
+      { text: '祝創刊', desc: '축창간' }, { text: '祝發刊', desc: '축발간' }, { text: '祝出版紀念', desc: '축출판기념' },
+      { text: '出版紀念會', desc: '출판기념회' }
+    ]
+  },
+  {
+    name: '🎨 전시/연주',
+    phrases: [
+      { text: '祝展覽會', desc: '축전람회' }, { text: '祝展示會', desc: '축전시회' }, { text: '祝品評會', desc: '축품평회' },
+      { text: '祝博覽會', desc: '축박람회' }, { text: '祝蓮奏會', desc: '축연주회' }, { text: '祝獨奏會', desc: '축독주회' },
+      { text: '祝個人展', desc: '축개인전' }
+    ]
+  },
+  {
+    name: '🎓 입학/졸업/합격',
+    phrases: [
+      { text: '祝入學', desc: '축입학' }, { text: '祝卒業', desc: '축졸업' }, { text: '祝合格', desc: '축합격' },
+      { text: '祝博士學位記授與', desc: '축박사학위' }, { text: '祝開校', desc: '축개교' }, { text: '頌功', desc: '송공' },
+      { text: '祝停年退任', desc: '축정년퇴임' }
+    ]
+  },
+  {
+    name: '🏆 우승/당선',
+    phrases: [
+      { text: '祝優勝', desc: '축우승' }, { text: '祝入選', desc: '축입선' }, { text: '祝必勝', desc: '축필승' },
+      { text: '祝健勝', desc: '축건승' }, { text: '祝當選', desc: '축당선' }, { text: '祝被選', desc: '축피선' }
+    ]
+  },
+  {
+    name: '⛪ 교회/종교',
+    phrases: [
+      { text: '獻堂', desc: '헌당' }, { text: '祝長老長立', desc: '축장로장립' }, { text: '牧師按手', desc: '목사안수' },
+      { text: '靈名祝日', desc: '영명축일' }, { text: '祝勸士就任', desc: '축권사취임' }, { text: '祝牧師委任', desc: '축목사위임' }
+    ]
+  },
+  {
+    name: '🎍 연말연시/시즌',
+    phrases: [
+      { text: '謹賀新年', desc: '근하신년' }, { text: '送舊迎新', desc: '송구영신' }, { text: '仲秋佳節', desc: '중추가절' },
+      { text: 'Happy New Year!', desc: '새해복' }, { text: 'Merry Christmas!', desc: '메리크리스마스' }
+    ]
+  }
 ];
 
 const SYMBOL_BANK = ['★', '(주)', '(유)', '♥', '♣', '♠', '◆', '▶', '◀', '※', '✝', '卍'];
@@ -89,10 +194,8 @@ const parseRibbonLine = (text: string, baseId: string, rotatedIds: Set<string>):
       // space
       nodes.push({ type: 'space', content: raw, id });
     } else {
-      // is this naturally rotated? (English/Numbers)
-      const isAlphanumeric = /[A-Za-z0-9]/.test(raw);
-      // user override check
-      const isRotated = rotatedIds.has(id) ? !isAlphanumeric : isAlphanumeric;
+      // default all to standing (false), rotate only if user clicked (id exists in rotatedIds)
+      const isRotated = rotatedIds.has(id);
       
       nodes.push({ type: 'char', content: raw, id, isRotated });
     }
@@ -400,6 +503,7 @@ export default function App() {
   // UI State
   const [activeSide, setActiveSide] = useState<'left'|'right'>('left');
   const [zoom, setZoom] = useState(0.4);
+  const [phraseCategory, setPhraseCategory] = useState(0);
 
   // Auto-Zoom Calculation
   useEffect(() => {
@@ -437,6 +541,26 @@ export default function App() {
     };
     if (side === 'left') setLeftRotated(toggleSet);
     else setRightRotated(toggleSet);
+  };
+
+  const handleRotateAll = (side: 'left'|'right') => {
+    const text = side === 'left' ? leftText : rightText;
+    const lines = text.split('\n').filter(l => l.trim() !== '');
+    const newRotated = new Set<string>();
+    lines.forEach((line, lIdx) => {
+      // Must match RibbonCanvas baseId pattern: 'L' + index
+      const nodes = parseRibbonLine(line, `L${lIdx}`, new Set());
+      nodes.forEach(n => {
+        if (n.type === 'char') newRotated.add(n.id);
+      });
+    });
+    if (side === 'left') setLeftRotated(newRotated);
+    else setRightRotated(newRotated);
+  };
+
+  const handleResetRotation = (side: 'left'|'right') => {
+    if (side === 'left') setLeftRotated(new Set());
+    else setRightRotated(new Set());
   };
 
   return (
@@ -497,17 +621,33 @@ export default function App() {
         <div className="space-y-2">
           <div className="flex items-center justify-between text-slate-300 font-bold mb-1 border-b border-slate-700 pb-2">
             <div className="flex items-center gap-2"><Type size={16} /> 좌측 리본 (경조사)</div>
-            <button 
-              onClick={() => setActiveSide('left')}
-              className={cn("text-[10px] px-2 py-0.5 rounded font-bold transition-all", activeSide === 'left' ? "bg-blue-600 text-white" : "bg-slate-700 text-slate-400")}
-            >ACTIVE</button>
+            <div className="flex items-center gap-1">
+              <button 
+                title="전체 90도 회전"
+                onClick={() => handleRotateAll('left')} 
+                className="hover:bg-slate-700 p-1 rounded text-slate-400 hover:text-white transition-colors"
+              >
+                <RotateCw size={14} />
+              </button>
+              <button 
+                title="회전 초기화"
+                onClick={() => handleResetRotation('left')} 
+                className="hover:bg-slate-700 p-1 rounded text-slate-400 hover:text-white transition-colors"
+              >
+                <Undo2 size={14} />
+              </button>
+              <button 
+                onClick={() => setActiveSide('left')}
+                className={cn("text-[10px] px-2 py-0.5 rounded font-bold transition-all ml-1", activeSide === 'left' ? "bg-blue-600 text-white" : "bg-slate-700 text-slate-400")}
+              >ACTIVE</button>
+            </div>
           </div>
           <input 
             type="text"
             value={leftText} 
             onChange={e => setLeftText(e.target.value)}
             onFocus={() => setActiveSide('left')}
-            className={cn("w-full p-2 rounded-lg text-sm leading-tight focus:ring-2", leftFont)}
+            className={cn("w-full p-2 rounded-lg text-sm leading-tight focus:ring-2 bg-slate-800 border-slate-700 text-white outline-none", leftFont)}
             placeholder="경조사 입력"
           />
           <div className="flex flex-col gap-2">
@@ -531,17 +671,33 @@ export default function App() {
         <div className="space-y-2">
           <div className="flex items-center justify-between text-slate-300 font-bold mb-1 border-b border-slate-700 pb-2">
             <div className="flex items-center gap-2"><Type size={16} /> 우측 리본 (보내는이)</div>
-            <button 
-              onClick={() => setActiveSide('right')}
-              className={cn("text-[10px] px-2 py-0.5 rounded font-bold transition-all", activeSide === 'right' ? "bg-blue-600 text-white" : "bg-slate-700 text-slate-400")}
-            >ACTIVE</button>
+            <div className="flex items-center gap-1">
+              <button 
+                title="전체 90도 회전"
+                onClick={() => handleRotateAll('right')} 
+                className="hover:bg-slate-700 p-1 rounded text-slate-400 hover:text-white transition-colors"
+              >
+                <RotateCw size={14} />
+              </button>
+              <button 
+                title="회전 초기화"
+                onClick={() => handleResetRotation('right')} 
+                className="hover:bg-slate-700 p-1 rounded text-slate-400 hover:text-white transition-colors"
+              >
+                <Undo2 size={14} />
+              </button>
+              <button 
+                onClick={() => setActiveSide('right')}
+                className={cn("text-[10px] px-2 py-0.5 rounded font-bold transition-all ml-1", activeSide === 'right' ? "bg-blue-600 text-white" : "bg-slate-700 text-slate-400")}
+              >ACTIVE</button>
+            </div>
           </div>
           <input 
             type="text"
             value={rightText} 
             onChange={e => setRightText(e.target.value)}
             onFocus={() => setActiveSide('right')}
-            className={cn("w-full p-2 rounded-lg text-sm leading-tight focus:ring-2", rightFont)}
+            className={cn("w-full p-2 rounded-lg text-sm leading-tight focus:ring-2 bg-slate-800 border-slate-700 text-white outline-none", rightFont)}
             placeholder="보내는이 입력"
           />
           <div className="flex flex-col gap-2">
@@ -597,19 +753,28 @@ export default function App() {
       <aside className="w-[280px] glass-panel shrink-0 z-10 p-5 overflow-y-auto space-y-6">
         
         <div>
-          <h2 className="text-sm font-bold text-slate-300 border-b border-slate-700 pb-2 mb-3">자주 쓰는 상용구</h2>
+          <div className="flex items-center justify-between border-b border-slate-700 pb-2 mb-3">
+             <h2 className="text-sm font-bold text-slate-300">자주 쓰는 상용구</h2>
+             <select 
+               value={phraseCategory} 
+               onChange={e => setPhraseCategory(Number(e.target.value))}
+               className="bg-slate-800 text-[10px] border-none rounded px-2 py-1 outline-none focus:ring-1 ring-blue-500 text-slate-300"
+             >
+               {PHRASE_CATEGORIES.map((cat, idx) => <option key={idx} value={idx}>{cat.name.split(' ')[1] || cat.name}</option>)}
+             </select>
+          </div>
           <div className="grid grid-cols-2 gap-2">
-            {PHRASE_BANK.map(phrase => (
+            {PHRASE_CATEGORIES[phraseCategory].phrases.map((item, idx) => (
                <button 
-                 key={phrase} 
+                 key={idx} 
                  onClick={() => {
-                   const formatted = phrase.replace(/ /g, '\n');
-                   if (activeSide === 'left') setLeftText(formatted);
-                   else setRightText(formatted);
+                   if (activeSide === 'left') setLeftText(item.text);
+                   else setRightText(item.text);
                  }}
-                 className="bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded py-2 text-xs font-bold transition-colors font-nanum-myeongjo"
+                 className="group bg-slate-800 hover:bg-blue-900/30 border border-slate-700 hover:border-blue-500 rounded p-2 transition-all flex flex-col items-center justify-center min-h-[50px]"
                >
-                 {phrase}
+                 <span className="text-[12px] font-bold text-slate-200 mb-0.5 leading-tight">{item.text}</span>
+                 <span className="text-[9px] text-slate-500 group-hover:text-blue-300">{item.desc}</span>
                </button>
             ))}
           </div>
