@@ -1,463 +1,561 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { 
   Printer, 
-  PlusCircle, 
-  Save, 
-  FolderOpen, 
-  Maximize2, 
-  Minimize2, 
-  RotateCw, 
+  Settings, 
   Ruler, 
-  Scissors, 
-  Settings2, 
-  History,
   Type,
-  MoveVertical
+  Maximize2,
+  Minimize2
 } from 'lucide-react';
-import './index.css';
+import { clsx, type ClassValue } from 'clsx';
+import { twMerge } from 'tailwind-merge';
 
-// 폰트 목록 (시스템 폰트 위주)
+function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
+
+// ==========================================
+// Constants & Config
+// ==========================================
 const FONTS = [
-  { value: 'Gungsuh, serif', label: '궁서체 (Classic)' },
-  { value: 'Batang, serif', label: '바탕체' },
-  { value: 'Malgun Gothic, sans-serif', label: '맑은 고딕' },
-  { value: 'Gulim, sans-serif', label: '굴림체' },
-  { value: 'Nanum Myeongjo, serif', label: '나눔명조' },
+  { value: 'font-noto-serif', label: 'Noto Serif (명조)' },
+  { value: 'font-noto-sans', label: 'Noto Sans (고딕)' },
+  { value: 'font-nanum-myeongjo', label: '나눔명조' },
+  { value: 'font-nanum-gothic', label: '나눔고딕' },
 ];
 
 const RIBBON_TYPES = [
-  { id: 'standard', name: '3단 화환 (150x2000mm)', width: 150, length: 2000 },
-  { id: 'oriental', name: '동양란 (45x450mm)', width: 45, length: 450 },
-  { id: 'western', name: '서양란 (60x600mm)', width: 60, length: 600 },
-  { id: 'custom', name: '직접 입력...', width: 100, length: 1000 },
+  { id: 'bouquet', name: '꽃다발 38x400mm', width: 38, lace: 5, length: 400, marginTop: 80, marginBottom: 50, fontSize: 30 },
+  { id: 'oriental_45', name: '동양란 45x450mm', width: 45, lace: 7, length: 450, marginTop: 100, marginBottom: 50, fontSize: 35 },
+  { id: 'oriental_50', name: '동양란 50x500mm', width: 50, lace: 10, length: 500, marginTop: 120, marginBottom: 80, fontSize: 40 },
+  { id: 'orchid_55', name: '동/서양란 55x500mm', width: 55, lace: 10, length: 500, marginTop: 120, marginBottom: 80, fontSize: 42 },
+  { id: 'western_60', name: '서양란 60/65x700mm', width: 60, lace: 10, length: 700, marginTop: 150, marginBottom: 100, fontSize: 45 },
+  { id: 'movie_70', name: '영화(중) 70x750mm', width: 70, lace: 10, length: 750, marginTop: 150, marginBottom: 100, fontSize: 55 },
+  { id: 'basket_95', name: '장바구니 95x1000mm', width: 95, lace: 10, length: 1000, marginTop: 180, marginBottom: 130, fontSize: 75 },
+  { id: 'pot_small', name: '화분 소 105/110x1100mm', width: 105, lace: 23, length: 1100, marginTop: 200, marginBottom: 150, fontSize: 80 },
+  { id: 'pot_medium', name: '화분 중 135x1500mm', width: 135, lace: 23, length: 1500, marginTop: 300, marginBottom: 200, fontSize: 100 },
+  { id: 'pot_large', name: '화분 대 150x1800mm', width: 150, lace: 23, length: 1800, marginTop: 350, marginBottom: 350, fontSize: 110 },
+  { id: 'wreath_1', name: '근조 1단 115x1200mm', width: 115, lace: 23, length: 1200, marginTop: 250, marginBottom: 150, fontSize: 90 },
+  { id: 'wreath_2', name: '근조 2단 135x1700mm', width: 135, lace: 23, length: 1700, marginTop: 300, marginBottom: 200, fontSize: 100 },
+  { id: 'wreath_3', name: '근조 3단 165x2200mm', width: 165, lace: 23, length: 2200, marginTop: 400, marginBottom: 300, fontSize: 130 },
+  { id: 'celebration_3', name: '축화 3단 165x2200mm', width: 165, lace: 23, length: 2200, marginTop: 400, marginBottom: 300, fontSize: 130 },
 ];
 
-/** 텍스트 파싱 및 정밀 제어 엔진 */
-const parseLineContent = (rawLine: string, defaultSize: number, defaultOrientation: string) => {
-  // 업계 표준인 '/' 기호를 줄바꿈으로 사용하기 위해 먼저 처리하는 경우도 있으나, 
-  // 여기서는 라인 단위 파싱이므로 개별 라인 내의 마크업만 처리합니다.
-  let text = rawLine.trim();
-  let size = defaultSize;
-  let orientation = defaultOrientation;
+const PHRASE_BANK = [
+  '祝 發 展',
+  '祝 開 業',
+  '祝 結 婚',
+  '謹 弔',
+  '祝 移 轉',
+  '祝 創 立',
+  '祝 就 任',
+  '祝 昇 進',
+];
 
-  let parsing = true;
-  while(parsing) {
-    if (text.startsWith('<') && text.endsWith('>')) {
-      size *= 1.4;
-      text = text.slice(1, -1).trim();
-    } else if (text.startsWith('[') && text.endsWith(']')) {
-      size *= 0.7;
-      text = text.slice(1, -1).trim();
-    } else if (text.startsWith('{') && text.endsWith('}')) {
-      orientation = 'sideways';
-      text = text.slice(1, -1).trim();
+const SYMBOL_BANK = ['★', '(주)', '(유)', '♥', '♣', '♠', '◆', '▶', '◀', '※', '✝', '卍'];
+
+// ==========================================
+// Parsing & Types
+// ==========================================
+interface CharNode {
+  type: 'char' | 'bracket' | 'split' | 'fullwidth' | 'space';
+  content: string;
+  leftContent?: string;
+  rightContent?: string;
+  isRotated?: boolean;
+  id: string; // for stable state tracking
+}
+
+const parseRibbonLine = (text: string, baseId: string, rotatedIds: Set<string>): CharNode[] => {
+  const nodes: CharNode[] = [];
+  const regex = /\[([^/\]]+)\/([^\]]+)\]|\[([^\]]+)\]|\((주|유)\)|( )|./gu;
+  let match;
+  let charIndex = 0;
+
+  while ((match = regex.exec(text)) !== null) {
+    const id = `${baseId}-${charIndex++}`;
+    const raw = match[0];
+
+    if (match[1] && match[2]) {
+      // [left/right]
+      nodes.push({ type: 'split', content: raw, leftContent: match[1], rightContent: match[2], id });
+    } else if (match[3]) {
+      // [bracket]
+      nodes.push({ type: 'bracket', content: match[3], id });
+    } else if (match[4]) {
+      // (주)
+      nodes.push({ type: 'fullwidth', content: raw, id });
+    } else if (match[5]) {
+      // space
+      nodes.push({ type: 'space', content: raw, id });
     } else {
-      parsing = false;
+      // is this naturally rotated? (English/Numbers)
+      const isAlphanumeric = /[A-Za-z0-9]/.test(raw);
+      // user override check
+      const isRotated = rotatedIds.has(id) ? !isAlphanumeric : isAlphanumeric;
+      
+      nodes.push({ type: 'char', content: raw, id, isRotated });
     }
   }
-  return { text, size, orientation };
+  return nodes;
 };
 
-const ControlGroup = ({ title, children, icon: Icon }: any) => (
-  <div className="bg-white border-b border-gray-200 p-4">
-    <div className="flex items-center gap-2 mb-3">
-      {Icon && <Icon size={16} className="text-gray-500" />}
-      <h3 className="text-xs font-bold text-gray-800 uppercase tracking-wider">{title}</h3>
-    </div>
-    <div className="space-y-3">
-      {children}
-    </div>
-  </div>
-);
+// ==========================================
+// Ribbon Canvas Component
+// ==========================================
+interface RibbonCanvasProps {
+  text: string;
+  font: string;
+  ratioX: number;    // horizontal percentage scale
+  ratioY: number;    // vertical percentage scale
+  width: number;
+  lace: number;
+  length: number;
+  marginTop: number;
+  marginBottom: number;
+  rotatedIds: Set<string>;
+  onCharClick: (id: string) => void;
+  scaleRatio: number; // rendering scale
+}
 
-const InputField = ({ label, children }: any) => (
-  <div className="flex items-center gap-2">
-    <label className="text-[11px] font-semibold text-gray-500 w-20 shrink-0">{label}</label>
-    <div className="flex-1">
-      {children}
-    </div>
-  </div>
-);
+const RibbonCanvas = ({ 
+  text, font, ratioX, ratioY, width, lace, length, marginTop, marginBottom, 
+  rotatedIds, onCharClick, scaleRatio 
+}: RibbonCanvasProps) => {
+  // Parse lines
+  const lines = text.split('\n').filter(l => l.trim() !== '');
 
-function App() {
-  // 전역 설정
-  const [ribbonType, setRibbonType] = useState('standard');
-  const [ribbonLength, setRibbonLength] = useState(2000);
-  const [ribbonWidth, setRibbonWidth] = useState(150);
-  const [marginTop, setMarginTop] = useState(150);
-  const [marginBottom, setMarginBottom] = useState(150);
-  const [printerName, setPrinterName] = useState('EPSON M105 Series');
+  // Base font size exactly matches the ribbon printable width in pixels
+  const printableWidthPX = Math.max(10, width - (lace * 2)) * scaleRatio;
+  const baseFontSizePX = printableWidthPX; // 100% fill always
+
+  const scaleXObj = ratioX / 100;
+  const scaleYObj = ratioY / 100;
+
+  // Actual block dimensions
+  const actualFontSize = baseFontSizePX * scaleYObj;
+  const fontScaleX = scaleYObj === 0 ? 1 : scaleXObj / scaleYObj;
+
+  return (
+    <div 
+      className="relative flex justify-center"
+      style={{
+        width: `${width * scaleRatio}px`,
+        height: `${length * scaleRatio}px`,
+      }}
+    >
+      {/* Visual Ruler Outside the Ribbon (Left side) */}
+      <div className="absolute -left-[50px] top-0 bottom-0 w-[40px] flex flex-col justify-between items-end text-[10px] text-gray-400 font-mono py-1 pr-2 z-10 pointer-events-none">
+        <span>0</span>
+        <div className="w-[1px] h-full bg-gray-500/50 absolute right-0 top-0 bottom-0"></div>
+        <span>{length}</span>
+      </div>
+
+      {/* Margins Indicators Outside the Ribbon (Left side extension) */}
+      <div 
+        className="absolute -left-[80px] right-0 border-t border-dashed border-red-500/70 z-20 pointer-events-none"
+        style={{ top: `${marginTop * scaleRatio}px` }}
+      >
+        <span className="absolute -top-[0.8rem] left-0 text-[10px] text-red-500 font-bold bg-[#0f172a] px-1 whitespace-nowrap">상단여백 {marginTop}</span>
+      </div>
+
+      <div 
+        className="absolute -left-[80px] right-0 border-b border-dashed border-red-500/70 z-20 pointer-events-none"
+        style={{ bottom: `${marginBottom * scaleRatio}px` }}
+      >
+        <span className="absolute top-[0.2rem] left-0 text-[10px] text-red-500 font-bold bg-[#0f172a] px-1 whitespace-nowrap">하단여백 {marginBottom}</span>
+      </div>
+
+      {/* Ribbon Body */}
+      <div className="bg-white ribbon-texture shadow-2xl relative overflow-hidden flex flex-col items-center" style={{ width: '100%', height: '100%' }}>
+        
+        {/* Lace Effects */}
+        {lace > 0 && (
+          <>
+            <div className="absolute left-0 top-0 bottom-0 border-r border-[#00000010] flex flex-col overflow-hidden" style={{ width: `${lace * scaleRatio}px` }}>
+               <div className="flex-1 w-full bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-amber-200/20 to-transparent" style={{ backgroundSize: '4px 4px' }} />
+            </div>
+            <div className="absolute right-0 top-0 bottom-0 border-l border-[#00000010] flex flex-col overflow-hidden" style={{ width: `${lace * scaleRatio}px` }}>
+               <div className="flex-1 w-full bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-amber-200/20 to-transparent" style={{ backgroundSize: '4px 4px' }} />
+            </div>
+          </>
+        )}
+
+        {/* Text Container boundaries = exact margins */}
+        <div 
+          className="absolute left-0 right-0 flex flex-row-reverse justify-center gap-4"
+          style={{
+            top: `${marginTop * scaleRatio}px`,
+            bottom: `${marginBottom * scaleRatio}px`,
+          }}
+        >
+          {lines.map((line, lIdx) => {
+            const nodes = parseRibbonLine(line, `L${lIdx}`, rotatedIds);
+            
+            // Mathematically calculate required height (Full Fit logic)
+            const requiredHeight = nodes.reduce((sum, n) => {
+               if (n.type === 'space') return sum + (actualFontSize * 0.65);
+               return sum + actualFontSize;
+            }, 0);
+            
+            const availableHeight = Math.max(0, (length - marginTop - marginBottom) * scaleRatio);
+            let squashRatio = 1;
+            if (requiredHeight > availableHeight && availableHeight > 0) {
+              squashRatio = availableHeight / requiredHeight;
+            }
+
+            return (
+              <div 
+                key={lIdx} 
+                className={cn(font, "flex flex-col items-center shrink-0 w-max text-black font-bold whitespace-nowrap")}
+                style={{
+                  height: squashRatio < 1 ? `${requiredHeight}px` : '100%',
+                  transform: squashRatio < 1 ? `scaleY(${squashRatio})` : 'none',
+                  transformOrigin: 'top center',
+                  justifyContent: nodes.length === 1 ? 'center' : 'space-between'
+                }}
+              >
+                {nodes.map(node => {
+                  const nodeH = actualFontSize;
+                  const nodeW = baseFontSizePX * scaleXObj;
+
+                  // Law 5: Space 65% Height
+                  if (node.type === 'space') {
+                    return <div key={node.id} style={{ height: `${nodeH * 0.65}px`, width: nodeW }} />;
+                  }
+
+                  // Law 4: Fullwidth
+                  if (node.type === 'fullwidth') {
+                    return (
+                      <div key={node.id} className="flex justify-center items-center shrink-0" style={{ height: nodeH, width: nodeW }}>
+                        <span style={{ fontSize: `${nodeH * 0.8}px`, transform: `scaleX(${fontScaleX})`, letterSpacing: '-0.1em' }}>{node.content}</span>
+                      </div>
+                    );
+                  }
+
+                  // Law 2: Bracket Compression
+                  if (node.type === 'bracket') {
+                    return (
+                      <div key={node.id} className="flex flex-col items-center justify-center shrink-0 leading-none" style={{ height: nodeH, width: nodeW }}>
+                        {node.content.split('').map((c, i) => (
+                           <span key={i} style={{ fontSize: `${nodeH * 0.6}px`, transform: `scaleX(${fontScaleX})`, lineHeight: 0.9 }}>{c}</span>
+                        ))}
+                      </div>
+                    );
+                  }
+
+                  // Law 3: Split Columns
+                  if (node.type === 'split') {
+                    return (
+                      <div key={node.id} className="flex flex-row items-center justify-center gap-1 shrink-0" style={{ height: nodeH, width: nodeW }}>
+                         <span style={{ fontSize: `${nodeH * 0.6}px`, transform: `scaleX(${fontScaleX})` }}>{node.leftContent}</span>
+                         <span style={{ fontSize: `${nodeH * 0.6}px`, transform: `scaleX(${fontScaleX})` }}>{node.rightContent}</span>
+                      </div>
+                    );
+                  }
+
+                  // Law 1: Normal / 90-degree Rotation
+                  return (
+                    <div 
+                      key={node.id} 
+                      className="cursor-pointer hover:text-blue-600 transition-colors flex justify-center items-center shrink-0 leading-none"
+                      style={{ height: nodeH, width: nodeW }}
+                      onClick={() => onCharClick(node.id)}
+                    >
+                      <span style={{ 
+                        fontSize: nodeH,
+                        transform: `scaleX(${fontScaleX}) ${node.isRotated ? 'rotate(90deg)' : ''}`,
+                        display: 'inline-block'
+                      }}>
+                        {node.content}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
+// ==========================================
+// Main Application
+// ==========================================
+export default function App() {
+  const mainRef = useRef<HTMLElement>(null);
+
+  // Specs State
+  const [ribbonType, setRibbonType] = useState(RIBBON_TYPES[0].id);
+  const [length, setLength] = useState(400);
+  const [width, setWidth] = useState(38);
+  const [lace, setLace] = useState(5);
+  const [marginTop, setMarginTop] = useState(80);
+  const [marginBottom, setMarginBottom] = useState(50);
+
+  // Left Ribbon State
+  const [leftText, setLeftText] = useState('祝發展');
+  const [leftFont, setLeftFont] = useState(FONTS[3].value);
+  const [leftRatioX, setLeftRatioX] = useState(100);
+  const [leftRatioY, setLeftRatioY] = useState(100);
+  const [leftRotated, setLeftRotated] = useState<Set<string>>(new Set());
+
+  // Right Ribbon State
+  const [rightText, setRightText] = useState('(주)디자인스튜디오 대표이사 [홍길동]');
+  const [rightFont, setRightFont] = useState(FONTS[3].value);
+  const [rightRatioX, setRightRatioX] = useState(100);
+  const [rightRatioY, setRightRatioY] = useState(100);
+  const [rightRotated, setRightRotated] = useState<Set<string>>(new Set());
+
+  // UI State
   const [activeSide, setActiveSide] = useState<'left'|'right'>('left');
+  const [zoom, setZoom] = useState(0.4);
 
-  // 좌측 리본 (경조사)
-  const [leftText, setLeftText] = useState('축 발 전');
-  const [leftFont, setLeftFont] = useState(FONTS[0].value);
-  const [leftSize, setLeftSize] = useState(120);
-  const [leftTracking, setLeftTracking] = useState(50);
-  const [leftOrientation, setLeftOrientation] = useState('upright');
-  const [leftPrint, setLeftPrint] = useState(true);
-
-  // 우측 리본 (보내는이)
-  const [rightText, setRightText] = useState('주식회사 ㅇㅇㅇ\\n대표이사 홍길동');
-  const [rightFont, setRightFont] = useState(FONTS[2].value);
-  const [rightSize, setRightSize] = useState(80);
-  const [rightTracking, setRightTracking] = useState(15);
-  const [rightOrientation, setRightOrientation] = useState('upright');
-  const [rightPrint, setRightPrint] = useState(true);
-
-  // 리본 타입 변경 시 자동 규격 설정
+  // Auto-Zoom Calculation
   useEffect(() => {
-    const type = RIBBON_TYPES.find(t => t.id === ribbonType);
-    if (type && type.id !== 'custom') {
-      setRibbonWidth(type.width);
-      setRibbonLength(type.length);
-      if (type.id === 'oriental' || type.id === 'western') {
-        setMarginTop(30);
-        setMarginBottom(30);
-        setLeftSize(40);
-        setRightSize(30);
-      } else {
-        setMarginTop(150);
-        setMarginBottom(150);
-        setLeftSize(120);
-        setRightSize(80);
+    if (mainRef.current && length > 0) {
+      const availableH = mainRef.current.clientHeight - 100; // top/bottom padding 50px each
+      const targetH = length * 2; // using scaleRatio = 2 internally relative to mm lengths
+      if (targetH > 0) {
+        setZoom(Math.min(2.0, availableH / targetH));
       }
+    }
+  }, [length, ribbonType]); // re-run when content changes
+
+  useEffect(() => {
+    const defaultSpecs = RIBBON_TYPES.find(t => t.id === ribbonType);
+    if (defaultSpecs) {
+      setWidth(defaultSpecs.width);
+      setLace(defaultSpecs.lace);
+      setLength(defaultSpecs.length);
+      setMarginTop(defaultSpecs.marginTop); 
+      setMarginBottom(defaultSpecs.marginBottom);
     }
   }, [ribbonType]);
 
-  const handlePrint = async () => {
-    const payload = {
-      printer_name: printerName,
-      paper_config: { length: ribbonLength, width: ribbonWidth, margin_top: marginTop, margin_bottom: marginBottom },
-      print_left: leftPrint,
-      print_right: rightPrint,
-      configs: {
-        '경조사': { text: leftText, font: leftFont, size: leftSize, tracking: leftTracking, orientation: leftOrientation },
-        '보내는이': { text: rightText, font: rightFont, size: rightSize, tracking: rightTracking, orientation: rightOrientation },
-      }
-    };
+  const insertSymbol = (sym: string) => {
+    if (activeSide === 'left') setLeftText(prev => prev + sym);
+    else setRightText(prev => prev + sym);
+  };
 
-    try {
-      const res = await fetch('http://localhost:8000/api/print', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
-      if (data.status === 'success') alert('인쇄 명령이 전달되었습니다.');
-      else alert('오류: ' + data.message);
-    } catch (e) {
-      alert('브릿지 서버 연결 실패: ' + e);
-    }
+  const toggleRotation = (id: string, side: 'left'|'right') => {
+    const toggleSet = (prev: Set<string>) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    };
+    if (side === 'left') setLeftRotated(toggleSet);
+    else setRightRotated(toggleSet);
   };
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-[#f1f3f5] overflow-hidden select-none">
-      {/* 1. 상단 전문 메뉴바 (Desktop App Style) */}
-      <nav className="h-10 bg-[#343a40] flex items-center px-4 justify-between border-b border-black shrink-0">
-        <div className="flex items-center gap-6">
-          <div className="text-white font-bold text-sm tracking-tighter flex items-center gap-2 italic">
-            <RotateCw size={14} className="text-blue-400" />
-            RibbonMaker PRO 2026
+    <div className="flex bg-slate-900 text-slate-200 h-screen w-screen overflow-hidden text-sm">
+      
+      {/* 1. Left Panel: Settings */}
+      <aside className="w-80 glass-panel flex flex-col shrink-0 z-10 p-5 overflow-y-auto space-y-6">
+        <div>
+          <h1 className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-400 flex items-center gap-2 mb-1">
+            <Ruler size={24} className="text-blue-500" />
+            RibbonMaker PRO
+          </h1>
+          <p className="text-xs text-slate-400 font-mono">Build 2026.03 (Full-Fit Engine)</p>
+        </div>
+
+        {/* Specs */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 text-slate-300 font-bold mb-2 border-b border-slate-700 pb-2">
+            <Settings size={16} /> 하드웨어 규격
           </div>
-          <div className="flex gap-4 text-gray-300 text-[11px] font-medium">
-             {['파일(F)', '편집(E)', '서식(T)', '보기(V)', '도움말(H)'].map(m => (
-               <span key={m} className="hover:text-white cursor-pointer px-1">{m}</span>
-             ))}
+          <div>
+            <label className="text-xs text-slate-400 block mb-1">프리셋</label>
+            <select 
+              value={ribbonType} 
+              onChange={e => setRibbonType(e.target.value)}
+              className="w-full p-2 rounded-lg text-sm"
+            >
+              {RIBBON_TYPES.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-slate-400 block mb-1">폭 (mm)</label>
+              <input type="number" value={width} onChange={e => setWidth(Number(e.target.value))} className="w-full p-2 rounded-lg text-sm text-center font-mono" />
+            </div>
+            <div>
+              <label className="text-xs text-slate-400 block mb-1">길이 (mm)</label>
+              <input type="number" value={length} onChange={e => setLength(Number(e.target.value))} className="w-full p-2 rounded-lg text-sm text-center font-mono" />
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="text-xs text-slate-400 block mb-1">상단</label>
+              <input type="number" value={marginTop} onChange={e => setMarginTop(Number(e.target.value))} className="w-full p-2 rounded-lg text-sm text-center font-mono" />
+            </div>
+            <div>
+              <label className="text-xs text-slate-400 block mb-1">하단</label>
+              <input type="number" value={marginBottom} onChange={e => setMarginBottom(Number(e.target.value))} className="w-full p-2 rounded-lg text-sm text-center font-mono" />
+            </div>
+            <div>
+              <label className="text-xs text-slate-400 block mb-1">레이스</label>
+              <input type="number" value={lace} onChange={e => setLace(Number(e.target.value))} className="w-full p-2 rounded-lg text-sm text-center font-mono" />
+            </div>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-           <div className="text-[10px] text-gray-400">Ver 2.0.4 [Build 20260316]</div>
-           <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+
+        {/* Left Ribbon Detail */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-slate-300 font-bold mb-1 border-b border-slate-700 pb-2">
+            <div className="flex items-center gap-2"><Type size={16} /> 좌측 리본 (경조사)</div>
+            <button 
+              onClick={() => setActiveSide('left')}
+              className={cn("text-[10px] px-2 py-0.5 rounded font-bold transition-all", activeSide === 'left' ? "bg-blue-600 text-white" : "bg-slate-700 text-slate-400")}
+            >ACTIVE</button>
+          </div>
+          <input 
+            type="text"
+            value={leftText} 
+            onChange={e => setLeftText(e.target.value)}
+            onFocus={() => setActiveSide('left')}
+            className={cn("w-full p-2 rounded-lg text-sm leading-tight focus:ring-2", leftFont)}
+            placeholder="경조사 입력"
+          />
+          <div className="flex flex-col gap-2">
+            <select value={leftFont} onChange={e => setLeftFont(e.target.value)} className="w-full p-2 rounded-lg text-sm bg-slate-800 border-slate-700 text-white">
+              {FONTS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+            </select>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="flex bg-slate-800 rounded-lg overflow-hidden border border-slate-700">
+                 <span className="bg-slate-700 text-xs text-slate-300 px-2 flex items-center justify-center shrink-0 w-12">가로</span>
+                 <input type="number" value={leftRatioX} onChange={e => setLeftRatioX(Number(e.target.value))} className="w-full p-1.5 text-sm text-center font-mono bg-transparent outline-none text-white" />
+              </div>
+              <div className="flex bg-slate-800 rounded-lg overflow-hidden border border-slate-700">
+                 <span className="bg-slate-700 text-xs text-slate-300 px-2 flex items-center justify-center shrink-0 w-12">세로</span>
+                 <input type="number" value={leftRatioY} onChange={e => setLeftRatioY(Number(e.target.value))} className="w-full p-1.5 text-sm text-center font-mono bg-transparent outline-none text-white" />
+              </div>
+            </div>
+          </div>
         </div>
-      </nav>
 
-      {/* 2. 툴바 (Ribbon Station Style) */}
-      <div className="h-14 bg-gradient-to-b from-[#f8f9fa] to-[#e9ecef] border-b border-[#adb5bd] flex items-center px-4 gap-2 shrink-0 shadow-sm overflow-x-auto">
-         <button className="flex flex-col items-center justify-center p-1 w-14 hover:bg-white border border-transparent hover:border-gray-300 rounded transition-all">
-            <PlusCircle size={18} className="text-blue-600" />
-            <span className="text-[10px] mt-1 font-bold">새 리본</span>
-         </button>
-         <button className="flex flex-col items-center justify-center p-1 w-14 hover:bg-white border border-transparent hover:border-gray-300 rounded transition-all">
-            <FolderOpen size={18} className="text-orange-500" />
-            <span className="text-[10px] mt-1 font-bold">열기</span>
-         </button>
-         <button className="flex flex-col items-center justify-center p-1 w-14 hover:bg-white border border-transparent hover:border-gray-300 rounded transition-all">
-            <Save size={18} className="text-green-600" />
-            <span className="text-[10px] mt-1 font-bold">저장</span>
-         </button>
-         <div className="w-px h-10 bg-gray-300 mx-1"></div>
-         <button onClick={handlePrint} className="flex flex-col items-center justify-center p-1 w-16 bg-blue-50 border border-blue-200 hover:bg-blue-600 hover:text-white rounded transition-all group">
-            <Printer size={18} className="text-blue-700 group-hover:text-white" />
-            <span className="text-[10px] mt-1 font-bold">인쇄하기</span>
-         </button>
-         <div className="w-px h-10 bg-gray-300 mx-1"></div>
-         <button className="flex flex-col items-center justify-center p-1 w-14 hover:bg-white border border-transparent hover:border-gray-300 rounded transition-all">
-            <History size={18} className="text-gray-600" />
-            <span className="text-[10px] mt-1 font-bold">이력관리</span>
-         </button>
-         <button className="flex flex-col items-center justify-center p-1 w-14 hover:bg-white border border-transparent hover:border-gray-300 rounded transition-all">
-            <Settings2 size={18} className="text-gray-600" />
-            <span className="text-[10px] mt-1 font-bold">설정</span>
-         </button>
-      </div>
-
-      <div className="flex flex-1 overflow-hidden">
-        {/* 3. 좌측: 파라미터 제어판 (전문가용 고밀도 UI) */}
-        <aside className="w-[340px] bg-gray-100 border-r border-[#adb5bd] flex flex-col overflow-y-auto shrink-0 shadow-lg z-10">
-          
-          <ControlGroup title="리본 유형 및 프린터" icon={Scissors}>
-            <InputField label="용지 종류">
-              <select value={ribbonType} onChange={e => setRibbonType(e.target.value)} className="w-full p-1 border border-gray-300 rounded text-[11px] h-7 outline-none">
-                {RIBBON_TYPES.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </select>
-            </InputField>
-            <InputField label="프린터 연결">
-              <select value={printerName} onChange={e => setPrinterName(e.target.value)} className="w-full p-1 border border-gray-300 rounded text-[11px] h-7 outline-none bg-blue-50">
-                <option value="EPSON M105 Series">Epson M105 (Banner)</option>
-                <option value="EPSON L1210">Epson L1210</option>
-              </select>
-            </InputField>
-          </ControlGroup>
-
-          <ControlGroup title="리본 규격 (mm)" icon={Ruler}>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-              <InputField label="총 길이">
-                <input type="number" value={ribbonLength} onChange={e => setRibbonLength(Number(e.target.value))} className="w-full p-1 border border-gray-300 rounded text-[11px] h-7 text-center" />
-              </InputField>
-              <InputField label="리본 폭">
-                <input type="number" value={ribbonWidth} onChange={e => setRibbonWidth(Number(e.target.value))} className="w-full p-1 border border-gray-300 rounded text-[11px] h-7 text-center" />
-              </InputField>
-              <InputField label="상단 여백">
-                <input type="number" value={marginTop} onChange={e => setMarginTop(Number(e.target.value))} className="w-full p-1 border border-gray-300 rounded text-[11px] h-7 text-center border-blue-200" />
-              </InputField>
-              <InputField label="하단 여백">
-                <input type="number" value={marginBottom} onChange={e => setMarginBottom(Number(e.target.value))} className="w-full p-1 border border-gray-300 rounded text-[11px] h-7 text-center border-blue-200" />
-              </InputField>
-            </div>
-          </ControlGroup>
-
-          {/* 좌측 리본 제어 */}
-          <ControlGroup title="좌측 리본 설정" icon={Type}>
-            <div className="flex items-center justify-between mb-2">
-               <div className="flex items-center gap-2">
-                  <input type="checkbox" id="leftPrint" checked={leftPrint} onChange={e => setLeftPrint(e.target.checked)} className="accent-blue-600" />
-                  <label htmlFor="leftPrint" className="text-[10px] font-bold text-blue-600 cursor-pointer">인쇄 포함</label>
-               </div>
-               <button 
-                  onClick={() => setActiveSide('left')}
-                  className={`px-2 py-0.5 text-[9px] rounded font-bold border transition-all ${activeSide === 'left' ? 'bg-blue-600 text-white border-blue-700' : 'bg-gray-200 text-gray-500 border-gray-300'}`}
-               >
-                  심볼 입력 대상
-               </button>
-            </div>
-            <textarea 
-               value={leftText.replace(/\\n/g, '\n')}
-               onFocus={() => setActiveSide('left')}
-               onChange={(e) => setLeftText(e.target.value.replace(/\n/g, '\\n'))}
-               className="w-full h-20 p-2 border border-blue-300 rounded text-base font-bold outline-none focus:ring-1 focus:ring-blue-500 shadow-inner"
-               placeholder="경조사 문구"
-            />
-            <div className="grid grid-cols-2 gap-2">
-               <select value={leftFont} onChange={e => setLeftFont(e.target.value)} className="p-1 border border-gray-300 rounded text-[11px] h-7">
-                  {FONTS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
-               </select>
-               <div className="flex items-center border border-gray-300 rounded overflow-hidden h-7">
-                  <span className="bg-gray-100 text-[9px] px-1 text-gray-500 border-r border-gray-300 h-full flex items-center">Size</span>
-                  <input type="number" value={leftSize} onChange={e => setLeftSize(Number(e.target.value))} className="w-full p-1 text-[11px] text-center" />
-               </div>
-            </div>
-            <div className="flex items-center gap-2">
-               <span className="text-[10px] text-gray-400 w-10">방향</span>
-               <select value={leftOrientation} onChange={e => setLeftOrientation(e.target.value)} className="flex-1 p-1 border border-gray-300 rounded text-[10px] h-7 outline-none">
-                  <option value="upright">세로쓰기 (정방향)</option>
-                  <option value="sideways">가로쓰기 (회전)</option>
-               </select>
-            </div>
-            <div className="flex items-center gap-2">
-               <span className="text-[10px] text-gray-400 w-10">자간</span>
-               <input type="range" min="-10" max="150" value={leftTracking} onChange={e => setLeftTracking(Number(e.target.value))} className="flex-1 accent-indigo-500" />
-               <span className="text-[10px] font-mono w-6 text-right">{leftTracking}</span>
-            </div>
-          </ControlGroup>
-
-          {/* 우측 리본 제어 */}
-          <ControlGroup title="우측 리본 설정" icon={Type}>
-            <div className="flex items-center justify-between mb-2">
-               <div className="flex items-center gap-2">
-                  <input type="checkbox" id="rightPrint" checked={rightPrint} onChange={e => setRightPrint(e.target.checked)} className="accent-blue-600" />
-                  <label htmlFor="rightPrint" className="text-[10px] font-bold text-blue-600 cursor-pointer">인쇄 포함</label>
-               </div>
-               <button 
-                  onClick={() => setActiveSide('right')}
-                  className={`px-2 py-0.5 text-[9px] rounded font-bold border transition-all ${activeSide === 'right' ? 'bg-blue-600 text-white border-blue-700' : 'bg-gray-200 text-gray-500 border-gray-300'}`}
-               >
-                  심볼 입력 대상
-               </button>
-            </div>
-            <textarea 
-               value={rightText.replace(/\\n/g, '\n')}
-               onFocus={() => setActiveSide('right')}
-               onChange={(e) => setRightText(e.target.value.replace(/\n/g, '\\n'))}
-               className="w-full h-20 p-2 border border-gray-300 rounded text-[13px] font-bold outline-none focus:ring-1 focus:ring-blue-500 shadow-inner"
-               placeholder="보내는 이 문구"
-            />
-            <div className="grid grid-cols-2 gap-2">
-               <select value={rightFont} onChange={e => setRightFont(e.target.value)} className="p-1 border border-gray-300 rounded text-[11px] h-7">
-                  {FONTS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
-               </select>
-               <div className="flex items-center border border-gray-300 rounded overflow-hidden h-7">
-                  <span className="bg-gray-100 text-[9px] px-1 text-gray-500 border-r border-gray-300 h-full flex items-center">Size</span>
-                  <input type="number" value={rightSize} onChange={e => setRightSize(Number(e.target.value))} className="w-full p-1 text-[11px] text-center" />
-               </div>
-            </div>
-            <div className="flex items-center gap-2">
-               <span className="text-[10px] text-gray-400 w-10">방향</span>
-               <select value={rightOrientation} onChange={e => setRightOrientation(e.target.value)} className="flex-1 p-1 border border-gray-300 rounded text-[10px] h-7 outline-none">
-                  <option value="upright">세로쓰기 (정방향)</option>
-                  <option value="sideways">가로쓰기 (회전)</option>
-               </select>
-            </div>
-            <div className="flex items-center gap-2">
-               <span className="text-[10px] text-gray-400 w-10">자간</span>
-               <input type="range" min="-10" max="150" value={rightTracking} onChange={e => setRightTracking(Number(e.target.value))} className="flex-1 accent-indigo-500" />
-               <span className="text-[10px] font-mono w-6 text-right">{rightTracking}</span>
-            </div>
-          </ControlGroup>
-
-          {/* 특수 문자 및 심볼 뱅크 */}
-          <ControlGroup title="심볼 패널 (Symbol Bank)">
-             <div className="grid grid-cols-5 gap-1">
-                {['★','(주)','(株)','🌹','🍃','卍','✝️','♥','🎗️','🚩'].map(s => (
-                  <button key={s} onClick={() => activeSide === 'left' ? setLeftText(leftText + s) : setRightText(rightText + s)} className="h-8 border border-gray-300 bg-white hover:bg-blue-100 flex items-center justify-center text-xs rounded transition-all">{s}</button>
-                ))}
-             </div>
-          </ControlGroup>
-        </aside>
-
-        {/* 4. 우측: 전문가용 고밀도 듀얼 리본 에디터 (Canvas Area) */}
-        <main className="flex-1 bg-[#495057] p-10 overflow-auto flex justify-center items-start shadow-inner relative">
-          
-          <div className="flex gap-16 relative">
-             {/* 왼쪽 눈금자 */}
-             <div className="absolute -left-12 top-0 bottom-0 w-8 border-r border-gray-500 hidden md:flex flex-col select-none pointer-events-none opacity-40">
-                {Array.from({ length: 21 }).map((_, i) => (
-                  <div key={i} className="flex-1 border-t border-gray-400 relative">
-                     <span className="absolute -top-2 left-0 text-[9px] text-gray-200">{(i * 100)}mm</span>
-                  </div>
-                ))}
-             </div>
-
-             {/* 왼쪽 리본 (경조사) */}
-             <div className={`flex flex-col items-center gap-3 transition-opacity duration-300 ${!leftPrint ? 'opacity-30' : 'opacity-100'}`}>
-                <div className="px-3 py-1 bg-black/40 text-white rounded-full text-[10px] font-bold uppercase tracking-widest flex items-center gap-2">
-                   <MoveVertical size={12} /> 좌측 리본
-                </div>
-                <div className="w-[160px] h-[900px] bg-white shadow-[0_15px_60px_rgba(0,0,0,0.6)] relative overflow-hidden flex flex-col items-center group ribbon-texture">
-                   {/* Satin Sheen Effect */}
-                   <div className="absolute inset-0 silk-sheen opacity-10 pointer-events-none group-hover:translate-x-full transition-transform duration-1000"></div>
-                   
-                   <div className="flex-1 w-full flex justify-center" style={{ 
-                      paddingTop: `${marginTop * 0.45}px`, 
-                      paddingBottom: `${marginBottom * 0.45}px` 
-                   }}>
-                      {leftText.split(/[\\n/]/).map((rawLine, idx) => {
-                         const { text, size, orientation } = parseLineContent(rawLine, leftSize, leftOrientation);
-                         return (
-                           <div key={idx} className="flex flex-col items-center mx-2 overflow-visible">
-                              {text.split('').map((char, cIdx) => (
-                                 <span key={cIdx} style={{ 
-                                    fontFamily: leftFont, 
-                                    fontSize: `${size}px`,
-                                    marginBottom: `${leftTracking}px`,
-                                    color: '#000',
-                                    lineHeight: 1,
-                                    transform: orientation === 'sideways' ? 'rotate(90deg)' : 'none',
-                                    display: 'inline-block',
-                                    fontWeight: 'bold'
-                                 }}>{char}</span>
-                              ))}
-                           </div>
-                         )
-                      })}
-                   </div>
-                </div>
-             </div>
-
-             {/* 오른쪽 리본 (보내는이) */}
-             <div className={`flex flex-col items-center gap-3 transition-opacity duration-300 ${!rightPrint ? 'opacity-30' : 'opacity-100'}`}>
-                <div className="px-3 py-1 bg-black/40 text-white rounded-full text-[10px] font-bold uppercase tracking-widest flex items-center gap-2">
-                   <MoveVertical size={12} /> 우측 리본
-                </div>
-                <div className="w-[160px] h-[900px] bg-[#fdfdfd] shadow-[0_15px_60px_rgba(0,0,0,0.6)] relative overflow-hidden flex flex-col items-center group ribbon-texture">
-                   <div className="absolute inset-0 silk-sheen opacity-10 pointer-events-none group-hover:translate-x-full transition-transform duration-1000"></div>
-                   
-                   <div className="flex-1 w-full flex justify-center" style={{ 
-                      paddingTop: `${marginTop * 0.45}px`, 
-                      paddingBottom: `${marginBottom * 0.45}px` 
-                   }}>
-                      <div className="flex flex-row-reverse justify-center w-full">
-                         {rightText.split(/[\\n/]/).map((rawLine, idx) => {
-                            const { text, size, orientation } = parseLineContent(rawLine, rightSize, rightOrientation);
-                            return (
-                              <div key={idx} className="flex flex-col items-center mx-2 overflow-visible">
-                                 {text.split('').map((char, cIdx) => (
-                                    <span key={cIdx} style={{ 
-                                       fontFamily: rightFont, 
-                                       fontSize: `${size}px`,
-                                       marginBottom: `${rightTracking}px`,
-                                       color: '#000',
-                                       lineHeight: 1,
-                                       transform: orientation === 'sideways' ? 'rotate(90deg)' : 'none',
-                                       display: 'inline-block',
-                                       fontWeight: 'bold'
-                                    }}>{char}</span>
-                                 ))}
-                              </div>
-                            )
-                         })}
-                      </div>
-                   </div>
-                </div>
-             </div>
-
-             {/* 오른쪽 눈금자 */}
-             <div className="absolute -right-12 top-0 bottom-0 w-8 border-l border-gray-500 hidden md:flex flex-col select-none pointer-events-none opacity-40">
-                {Array.from({ length: 21 }).map((_, i) => (
-                  <div key={i} className="flex-1 border-t border-gray-400 relative">
-                     <span className="absolute -top-2 right-0 text-[9px] text-gray-200">{(i * 100)}mm</span>
-                  </div>
-                ))}
-             </div>
+        {/* Right Ribbon Detail */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-slate-300 font-bold mb-1 border-b border-slate-700 pb-2">
+            <div className="flex items-center gap-2"><Type size={16} /> 우측 리본 (보내는이)</div>
+            <button 
+              onClick={() => setActiveSide('right')}
+              className={cn("text-[10px] px-2 py-0.5 rounded font-bold transition-all", activeSide === 'right' ? "bg-blue-600 text-white" : "bg-slate-700 text-slate-400")}
+            >ACTIVE</button>
           </div>
-
-          {/* 뷰 조정 위젯 */}
-          <div className="absolute bottom-6 right-6 flex gap-2">
-             <button className="w-10 h-10 bg-white/10 hover:bg-white/20 border border-white/20 rounded flex items-center justify-center text-white backdrop-blur shadow-xl transition-all">
-                <Minimize2 size={20} />
-             </button>
-             <button className="w-10 h-10 bg-white/10 hover:bg-white/20 border border-white/20 rounded flex items-center justify-center text-white backdrop-blur shadow-xl transition-all">
-                <Maximize2 size={20} />
-             </button>
+          <input 
+            type="text"
+            value={rightText} 
+            onChange={e => setRightText(e.target.value)}
+            onFocus={() => setActiveSide('right')}
+            className={cn("w-full p-2 rounded-lg text-sm leading-tight focus:ring-2", rightFont)}
+            placeholder="보내는이 입력"
+          />
+          <div className="flex flex-col gap-2">
+            <select value={rightFont} onChange={e => setRightFont(e.target.value)} className="w-full p-2 rounded-lg text-sm bg-slate-800 border-slate-700 text-white">
+              {FONTS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+            </select>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="flex bg-slate-800 rounded-lg overflow-hidden border border-slate-700">
+                 <span className="bg-slate-700 text-xs text-slate-300 px-2 flex items-center justify-center shrink-0 w-12">가로</span>
+                 <input type="number" value={rightRatioX} onChange={e => setRightRatioX(Number(e.target.value))} className="w-full p-1.5 text-sm text-center font-mono bg-transparent outline-none text-white" />
+              </div>
+              <div className="flex bg-slate-800 rounded-lg overflow-hidden border border-slate-700">
+                 <span className="bg-slate-700 text-xs text-slate-300 px-2 flex items-center justify-center shrink-0 w-12">세로</span>
+                 <input type="number" value={rightRatioY} onChange={e => setRightRatioY(Number(e.target.value))} className="w-full p-1.5 text-sm text-center font-mono bg-transparent outline-none text-white" />
+              </div>
+            </div>
           </div>
-        </main>
-      </div>
+        </div>
+      </aside>
 
-      {/* 5. 바닥글 (Status Bar) */}
-      <footer className="h-7 bg-[#212529] border-t border-black flex items-center px-3 justify-between shrink-0">
-         <div className="text-[10px] text-gray-400 flex items-center gap-4">
-            <span>Ready</span>
-            <div className="w-px h-3 bg-gray-700"></div>
-            <span>Object: Hybrid Ribbon [Left: {leftPrint ? 'Enabled' : 'Disabled'} | Right: {rightPrint ? 'Enabled' : 'Disabled'}]</span>
-            <div className="w-px h-3 bg-gray-700"></div>
-            <span>Metric: {ribbonWidth}x{ribbonLength}mm</span>
-         </div>
-         <div className="text-[10px] text-gray-500 font-mono">
-            CRC: 0xFD42 | UTF-8 | Win-Bridge 8000
-         </div>
-      </footer>
+      {/* 2. Center Panel: Canvas */}
+      <main ref={mainRef} className="flex-1 relative flex justify-center items-start overflow-auto p-12 bg-[#0f172a]">
+        
+        {/* Canvas Area */}
+        <div className="flex gap-24 transition-transform duration-300" style={{ transform: `scale(${zoom})`, transformOrigin: 'top center' }}>
+          <RibbonCanvas 
+            text={leftText} font={leftFont} ratioX={leftRatioX} ratioY={leftRatioY} lace={lace}
+            width={width} length={length} marginTop={marginTop} marginBottom={marginBottom}
+            rotatedIds={leftRotated} onCharClick={(id) => toggleRotation(id, 'left')}
+            scaleRatio={2} // Actual size * 2 for better resolution
+          />
+          <RibbonCanvas 
+            text={rightText} font={rightFont} ratioX={rightRatioX} ratioY={rightRatioY} lace={lace}
+            width={width} length={length} marginTop={marginTop} marginBottom={marginBottom}
+            rotatedIds={rightRotated} onCharClick={(id) => toggleRotation(id, 'right')}
+            scaleRatio={2} // Actual size * 2 for better resolution
+          />
+        </div>
+
+        {/* Floating Actions */}
+        <div className="fixed bottom-8 right-[320px] bg-slate-800/80 backdrop-blur-md p-2 rounded-full border border-slate-600 flex gap-2 shadow-2xl z-20">
+          <button onClick={() => setZoom(z => Math.max(0.1, z - 0.1))} className="p-2 hover:bg-slate-700 rounded-full transition-colors"><Minimize2 size={18} /></button>
+          <div className="px-3 flex items-center justify-center font-mono text-xs">{Math.round(zoom * 100)}%</div>
+          <button onClick={() => setZoom(z => Math.min(2.0, z + 0.1))} className="p-2 hover:bg-slate-700 rounded-full transition-colors"><Maximize2 size={18} /></button>
+          <div className="w-px h-6 bg-slate-600 my-auto mx-1"></div>
+          <button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-full font-bold transition-all shadow-lg">
+            <Printer size={16} /> PRINT
+          </button>
+        </div>
+      </main>
+
+      {/* 3. Right Panel: Banks */}
+      <aside className="w-[280px] glass-panel shrink-0 z-10 p-5 overflow-y-auto space-y-6">
+        
+        <div>
+          <h2 className="text-sm font-bold text-slate-300 border-b border-slate-700 pb-2 mb-3">자주 쓰는 상용구</h2>
+          <div className="grid grid-cols-2 gap-2">
+            {PHRASE_BANK.map(phrase => (
+               <button 
+                 key={phrase} 
+                 onClick={() => {
+                   const formatted = phrase.replace(/ /g, '\n');
+                   if (activeSide === 'left') setLeftText(formatted);
+                   else setRightText(formatted);
+                 }}
+                 className="bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded py-2 text-xs font-bold transition-colors font-nanum-myeongjo"
+               >
+                 {phrase}
+               </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <h2 className="text-sm font-bold text-slate-300 border-b border-slate-700 pb-2 mb-3">특수기호 (Click to Insert)</h2>
+          <div className="grid grid-cols-4 gap-2">
+            {SYMBOL_BANK.map(sym => (
+               <button 
+                 key={sym} 
+                 onClick={() => insertSymbol(sym)}
+                 className="bg-slate-800 hover:bg-brand border border-slate-700 hover:border-brand rounded py-2 text-xs transition-colors"
+               >
+                 {sym}
+               </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700 space-y-2 mt-auto">
+          <h3 className="text-xs font-bold text-blue-400 mb-2">프리뷰 팁 (7대 법칙)</h3>
+          <ul className="text-[10px] text-slate-400 space-y-1 ml-3 list-disc">
+            <li>영문/숫자는 자동 회전됩니다. <strong>클릭</strong>하여 수동으로 눕힐 수 있습니다.</li>
+            <li><code>[홍길동]</code> 입력 시 한 칸에 알맞게 압축됩니다.</li>
+            <li><code>[왼쪽/오른쪽]</code> 입력 시 두 열로 나뉩니다.</li>
+            <li>글자가 많아지면 리본 밖으로 나가지 않도록 자동으로 여백에 딱 맞게(Squash) 조절됩니다.</li>
+            <li><code>(주)</code> 등의 기호는 전각 최적화됩니다.</li>
+          </ul>
+        </div>
+
+      </aside>
+
     </div>
   );
 }
-
-export default App;
