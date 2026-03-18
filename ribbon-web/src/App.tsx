@@ -116,18 +116,20 @@ interface RibbonCanvasProps {
   rotatedIds: Set<string>;
   onCharClick: (id: string) => void;
   scaleRatio: number; // rendering scale
+  zoom: number;      // current zoom level to compensate UI scale
+  side?: 'left' | 'right'; 
 }
 
 const RibbonCanvas = ({ 
   text, font, ratioX, ratioY, width, lace, length, marginTop, marginBottom, 
-  rotatedIds, onCharClick, scaleRatio 
+  rotatedIds, onCharClick, scaleRatio, zoom, side = 'left'
 }: RibbonCanvasProps) => {
   // Parse lines
   const lines = text.split('\n').filter(l => l.trim() !== '');
 
   // Base font size exactly matches the ribbon printable width in pixels
   const printableWidthPX = Math.max(10, width - (lace * 2)) * scaleRatio;
-  const baseFontSizePX = printableWidthPX; // 100% fill always
+  const baseFontSizePX = printableWidthPX * 1.15; // Visual 100% Fill (accounts for font margins)
 
   const scaleXObj = ratioX / 100;
   const scaleYObj = ratioY / 100;
@@ -144,26 +146,66 @@ const RibbonCanvas = ({
         height: `${length * scaleRatio}px`,
       }}
     >
-      {/* Visual Ruler Outside the Ribbon (Left side) */}
-      <div className="absolute -left-[50px] top-0 bottom-0 w-[40px] flex flex-col justify-between items-end text-[10px] text-gray-400 font-mono py-1 pr-2 z-10 pointer-events-none">
-        <span>0</span>
-        <div className="w-[1px] h-full bg-gray-500/50 absolute right-0 top-0 bottom-0"></div>
-        <span>{length}</span>
+      {/* Visual Ruler Outside the Ribbon */}
+      <div 
+        className={cn(
+          "absolute top-0 bottom-0 flex flex-col justify-between font-mono py-1 z-10 pointer-events-none",
+          side === 'left' ? "items-end pr-2" : "items-start pl-2"
+        )}
+        style={{
+          width: `${60 / zoom}px`,
+          [side === 'left' ? 'right' : 'left']: '100%',
+          [side === 'left' ? 'marginRight' : 'marginLeft']: `${20 / zoom}px`
+        }}
+      >
+        <span style={{ transform: `scale(${1/zoom})`, transformOrigin: side === 'left' ? 'right top' : 'left top', fontSize: '14px', color: '#94a3b8', fontWeight: 'bold' }}>0</span>
+        <div style={{ width: `${1/zoom}px` }} className={cn("h-full bg-gray-500/50 absolute top-0 bottom-0", side === 'left' ? "right-0" : "left-0")}></div>
+        <span style={{ transform: `scale(${1/zoom})`, transformOrigin: side === 'left' ? 'right bottom' : 'left bottom', fontSize: '14px', color: '#94a3b8', fontWeight: 'bold' }}>{length}</span>
       </div>
 
-      {/* Margins Indicators Outside the Ribbon (Left side extension) */}
+      {/* Margins Indicators Outside the Ribbon */}
       <div 
-        className="absolute -left-[80px] right-0 border-t border-dashed border-red-500/70 z-20 pointer-events-none"
-        style={{ top: `${marginTop * scaleRatio}px` }}
+        className={cn("absolute border-red-500/70 z-20 pointer-events-none", side === 'left' ? "right-full" : "left-full")}
+        style={{ 
+          top: `${marginTop * scaleRatio}px`,
+          borderTopWidth: `${1/zoom}px`,
+          borderTopStyle: 'dashed',
+          width: `${120 / zoom}px`, // Constant line length on screen
+          [side === 'left' ? 'marginRight' : 'marginLeft']: '0px'
+        }}
       >
-        <span className="absolute -top-[0.8rem] left-0 text-[10px] text-red-500 font-bold bg-[#0f172a] px-1 whitespace-nowrap">상단여백 {marginTop}</span>
+        <span 
+          className={cn("absolute text-[14px] text-red-500 font-black bg-[#0f172a] px-1 whitespace-nowrap", side === 'left' ? "left-0" : "right-0")}
+          style={{ 
+            transform: `scale(${1/zoom})`, 
+            transformOrigin: side === 'left' ? 'left bottom' : 'right bottom',
+            bottom: `${0.3/zoom}rem`
+          }}
+        >
+          상단여백 {marginTop}
+        </span>
       </div>
 
       <div 
-        className="absolute -left-[80px] right-0 border-b border-dashed border-red-500/70 z-20 pointer-events-none"
-        style={{ bottom: `${marginBottom * scaleRatio}px` }}
+        className={cn("absolute border-red-500/70 z-20 pointer-events-none", side === 'left' ? "right-full" : "left-full")}
+        style={{ 
+          bottom: `${marginBottom * scaleRatio}px`,
+          borderBottomWidth: `${1/zoom}px`,
+          borderBottomStyle: 'dashed',
+          width: `${120 / zoom}px`, // Constant line length on screen
+          [side === 'left' ? 'marginRight' : 'marginLeft']: '0px'
+        }}
       >
-        <span className="absolute top-[0.2rem] left-0 text-[10px] text-red-500 font-bold bg-[#0f172a] px-1 whitespace-nowrap">하단여백 {marginBottom}</span>
+        <span 
+          className={cn("absolute text-[14px] text-red-500 font-black bg-[#0f172a] px-1 whitespace-nowrap", side === 'left' ? "left-0" : "right-0")}
+          style={{ 
+            transform: `scale(${1/zoom})`, 
+            transformOrigin: side === 'left' ? 'left top' : 'right top',
+            top: `${0.3/zoom}rem`
+          }}
+        >
+          하단여백 {marginBottom}
+        </span>
       </div>
 
       {/* Ribbon Body */}
@@ -195,6 +237,18 @@ const RibbonCanvas = ({
             // Mathematically calculate required height (Full Fit logic)
             const requiredHeight = nodes.reduce((sum, n) => {
                if (n.type === 'space') return sum + (actualFontSize * 0.65);
+
+               // Add buffer spacing for bracketed/split nodes (Law 2 & 3)
+               const nodeSpacing = (n.type === 'bracket' || n.type === 'split') ? (actualFontSize * 0.5) : 0;
+
+               if (n.type === 'split') {
+                 const leftL = n.leftContent?.length || 0;
+                 const rightL = n.rightContent?.length || 0;
+                 return sum + (Math.max(leftL, rightL) * actualFontSize * 0.65) + nodeSpacing;
+               }
+               if (n.type === 'bracket') {
+                 return sum + (n.content.length * actualFontSize * 0.65) + nodeSpacing;
+               }
                return sum + actualFontSize;
             }, 0);
             
@@ -227,29 +281,62 @@ const RibbonCanvas = ({
                   // Law 4: Fullwidth
                   if (node.type === 'fullwidth') {
                     return (
-                      <div key={node.id} className="flex justify-center items-center shrink-0" style={{ height: nodeH, width: nodeW }}>
-                        <span style={{ fontSize: `${nodeH * 0.8}px`, transform: `scaleX(${fontScaleX})`, letterSpacing: '-0.1em' }}>{node.content}</span>
+                      <div key={node.id} className="flex justify-center items-center shrink-0" style={{ height: actualFontSize, width: nodeW }}>
+                        <span style={{ fontSize: `${actualFontSize * 0.85}px`, transform: `scaleX(${fontScaleX})`, display: 'inline-block', letterSpacing: '-0.1em' }}>{node.content}</span>
                       </div>
                     );
                   }
 
-                  // Law 2: Bracket Compression
+                  // Law 2: Special Bracket Multi-line (e.g. [HongGilDong])
                   if (node.type === 'bracket') {
+                    const chars = node.content.split('');
+                    const blockHeight = chars.length * actualFontSize * 0.65; 
+                    
                     return (
-                      <div key={node.id} className="flex flex-col items-center justify-center shrink-0 leading-none" style={{ height: nodeH, width: nodeW }}>
-                        {node.content.split('').map((c, i) => (
-                           <span key={i} style={{ fontSize: `${nodeH * 0.6}px`, transform: `scaleX(${fontScaleX})`, lineHeight: 0.9 }}>{c}</span>
+                      <div key={node.id} className={cn("flex flex-col items-center shrink-0 leading-none py-2", chars.length > 1 ? "justify-between" : "justify-center")} style={{ height: blockHeight + (actualFontSize * 0.5), width: nodeW }}>
+                        {chars.map((c, i) => (
+                           <span key={i} style={{ 
+                             fontSize: `${nodeW * 0.65}px`, // 65% reduction as requested
+                             lineHeight: 1,
+                             display: 'inline-block',
+                             fontWeight: 'bold'
+                           }}>{c}</span>
                         ))}
                       </div>
                     );
                   }
 
-                  // Law 3: Split Columns
+                  // Law 3: Split Columns (Parallel vertical stacks)
                   if (node.type === 'split') {
+                    const leftChars = node.leftContent?.split('') || [];
+                    const rightChars = node.rightContent?.split('') || [];
+                    const maxLen = Math.max(leftChars.length, rightChars.length);
+                    const blockHeight = maxLen * actualFontSize * 0.65;
+
                     return (
-                      <div key={node.id} className="flex flex-row items-center justify-center gap-1 shrink-0" style={{ height: nodeH, width: nodeW }}>
-                         <span style={{ fontSize: `${nodeH * 0.6}px`, transform: `scaleX(${fontScaleX})` }}>{node.leftContent}</span>
-                         <span style={{ fontSize: `${nodeH * 0.6}px`, transform: `scaleX(${fontScaleX})` }}>{node.rightContent}</span>
+                      <div key={node.id} className="flex flex-row items-center justify-center shrink-0 py-2" style={{ height: blockHeight + (actualFontSize * 0.5), width: nodeW }}>
+                         <div className={cn("flex flex-col items-center h-full flex-1", leftChars.length > 1 ? "justify-between" : "justify-center")}>
+                           {leftChars.map((char, i) => (
+                             <div key={i} className="flex items-center justify-center shrink-0" style={{ height: blockHeight / maxLen, width: '100%' }}>
+                               <span style={{ 
+                                 fontSize: `${nodeW * 0.65 * 0.45}px`, // 65% of half width
+                                 display: 'inline-block',
+                                 lineHeight: 1
+                               }}>{char}</span>
+                             </div>
+                           ))}
+                         </div>
+                         <div className={cn("flex flex-col items-center h-full flex-1", rightChars.length > 1 ? "justify-between" : "justify-center")}>
+                           {rightChars.map((char, i) => (
+                             <div key={i} className="flex items-center justify-center shrink-0" style={{ height: blockHeight / maxLen, width: '100%' }}>
+                               <span style={{ 
+                                 fontSize: `${nodeW * 0.65 * 0.45}px`, // 65% of half width
+                                 display: 'inline-block',
+                                 lineHeight: 1
+                               }}>{char}</span>
+                             </div>
+                           ))}
+                         </div>
                       </div>
                     );
                   }
@@ -484,13 +571,13 @@ export default function App() {
             text={leftText} font={leftFont} ratioX={leftRatioX} ratioY={leftRatioY} lace={lace}
             width={width} length={length} marginTop={marginTop} marginBottom={marginBottom}
             rotatedIds={leftRotated} onCharClick={(id) => toggleRotation(id, 'left')}
-            scaleRatio={2} // Actual size * 2 for better resolution
+            scaleRatio={2} zoom={zoom} side="left"
           />
           <RibbonCanvas 
             text={rightText} font={rightFont} ratioX={rightRatioX} ratioY={rightRatioY} lace={lace}
             width={width} length={length} marginTop={marginTop} marginBottom={marginBottom}
             rotatedIds={rightRotated} onCharClick={(id) => toggleRotation(id, 'right')}
-            scaleRatio={2} // Actual size * 2 for better resolution
+            scaleRatio={2} zoom={zoom} side="right"
           />
         </div>
 
