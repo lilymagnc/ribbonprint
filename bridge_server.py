@@ -39,7 +39,14 @@ printer_manager = PrinterManager()
 class PrintJobRequest(BaseModel):
     printer_name: str
     configs: Dict[str, dict]  # {'경조사': config_dict, '보내는이': config_dict}
-    
+
+class PrintImageRequest(BaseModel):
+    printer_name: str
+    image_base64: str  # data:image/png;base64,....
+    width_mm: float
+    length_mm: float
+    media_type: Optional[str] = "roll" # "roll" or "cut"
+
 # -----------------------------------------------------
 # HTTP 엔드포인트
 # -----------------------------------------------------
@@ -52,43 +59,52 @@ def read_root():
 def list_printers():
     """연결 가능한 지원 프린터 목록을 반환합니다."""
     try:
-        printers = printer_manager.get_available_printers()
+        # printer_manager.get_available_printers() -> refresh_printers() to ensure latest list
+        printers = printer_manager.refresh_printers()
         return {"status": "success", "data": printers}
     except Exception as e:
         logger.error(f"Failed to get printer list: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"status": "error", "message": str(e)}
 
 @app.post("/api/print")
 def submit_print_job(job: PrintJobRequest):
-    """웹 앱으로부터 인쇄 데이터를 수신하여 로컬 프린터로 출력을 실행합니다."""
+    """실제 인쇄를 실행하지 않고 에러를 방지하기 위해 둡니다."""
     logger.info(f"Received print job request for printer: {job.printer_name}")
-    
-    # 1. 프린터 선택 검증
-    if not job.printer_name:
-        raise HTTPException(status_code=400, detail="Printer name is required")
-        
+    return {"status": "success", "message": "Print job simulated. Please use /api/print_image for actual output."}
+
+@app.post("/api/print_image")
+def submit_print_image(job: PrintImageRequest):
+    """프론트엔드에서 렌더링된 이미지를 받아 출력합니다."""
+    logger.info(f"Received image print job for printer: {job.printer_name}")
     try:
+        if not job.printer_name:
+            raise HTTPException(status_code=400, detail="Printer name is required")
+        
+        # 1. 프린터 선택
         success = printer_manager.select_printer(job.printer_name)
         if not success:
-            raise HTTPException(status_code=400, detail=f"Printer '{job.printer_name}' could not be selected or is not a supported model.")
-    except Exception as e:
-         raise HTTPException(status_code=500, detail=f"Error selecting printer: {str(e)}")
+             return {"status": "error", "message": f"Failed to select printer {job.printer_name}"}
 
-    # 2. 인쇄 실행
-    try:
-        # 기존 main.py의 `_perform_print`와 유사한 동작 수행
-        result, error_msg = printer_manager.print_ribbon(job.configs)
+        # 2. 이미지 디코딩 및 인쇄
+        import base64
+        import io
+        from PIL import Image
         
-        if result:
-            logger.info("Print job completed successfully.")
-            return {"status": "success", "message": "Print job completed successfully"}
+        image_data = job.image_base64.split(",")[1]
+        image_bytes = base64.b64decode(image_data)
+        image = Image.open(io.BytesIO(image_bytes)).convert('RGB')
+        
+        # 브릿지로 이미지 전송 (이미 구현된 _send_to_printer 활용)
+        res = printer_manager.bridge._send_to_printer(image, {'리본넓이': job.width_mm, '리본길이': job.length_mm})
+        
+        if res:
+            return {"status": "success"}
         else:
-             logger.error(f"Print job failed: {error_msg}")
-             raise HTTPException(status_code=500, detail=f"Print failed: {error_msg}")
-             
+            return {"status": "error", "message": "Printing failed in bridge"}
+            
     except Exception as e:
-        logger.error(f"Exception during print process: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error during image print: {e}")
+        return {"status": "error", "message": str(e)}
 
 
 if __name__ == "__main__":

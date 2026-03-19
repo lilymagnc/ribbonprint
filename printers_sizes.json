@@ -1,0 +1,112 @@
+﻿[
+    {
+        "PaperName":  "A4 210 x 297 mm",
+        "Width":  827,
+        "Height":  1169
+    },
+    {
+        "PaperName":  "10 x 15 cm (4 x 6 in)",
+        "Width":  400,
+        "Height":  600
+    },
+    {
+        "PaperName":  "13 x 18 cm (5 x 7 in)",
+        "Width":  500,
+        "Height":  701
+    },
+    {
+        "PaperName":  "A6 105 x 148 mm",
+        "Width":  413,
+        "Height":  583
+    },
+    {
+        "PaperName":  "A5 148 x 210 mm",
+        "Width":  583,
+        "Height":  827
+    },
+    {
+        "PaperName":  "B5 182 x 257 mm",
+        "Width":  717,
+        "Height":  1012
+    },
+    {
+        "PaperName":  "9 x 13 cm (3.5 x 5 in)",
+        "Width":  350,
+        "Height":  500
+    },
+    {
+        "PaperName":  "13 x 20 cm (5 x 8 in)",
+        "Width":  500,
+        "Height":  800
+    },
+    {
+        "PaperName":  "20 x 25 cm (8 x 10 in)",
+        "Width":  800,
+        "Height":  1000
+    },
+    {
+        "PaperName":  "16:9 wide size (102 x 181 mm)",
+        "Width":  400,
+        "Height":  711
+    },
+    {
+        "PaperName":  "100 x 148 mm",
+        "Width":  394,
+        "Height":  583
+    },
+    {
+        "PaperName":  "Envelope #10 4 1/8 x 9 1/2 in",
+        "Width":  413,
+        "Height":  950
+    },
+    {
+        "PaperName":  "Envelope DL  110 x 220 mm",
+        "Width":  433,
+        "Height":  866
+    },
+    {
+        "PaperName":  "Envelope C6  114 x 162 mm",
+        "Width":  449,
+        "Height":  638
+    },
+    {
+        "PaperName":  "Letter 8 1/2 x 11 in",
+        "Width":  850,
+        "Height":  1100
+    },
+    {
+        "PaperName":  "Legal 8 1/2 x 14 in",
+        "Width":  850,
+        "Height":  1400
+    },
+    {
+        "PaperName":  "A3 297 x 420 mm",
+        "Width":  1169,
+        "Height":  1654
+    },
+    {
+        "PaperName":  "A3+ 329 x 483 mm",
+        "Width":  1295,
+        "Height":  1902
+    },
+    {
+        "PaperName":  "A2 420 x 594 mm",
+        "Width":  1654,
+        "Height":  2339
+    },
+    {
+        "PaperName":  "B4 257 x 364 mm",
+        "Width":  1012,
+        "Height":  1433
+    },
+    {
+        "PaperName":  "B3 364 x 515 mm",
+        "Width":  1433,
+        "Height":  2028
+    },
+    {
+        "PaperName":  "사용자 정의",
+        "Width":  827,
+        "Height":  1169
+    }
+]

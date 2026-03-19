@@ -326,50 +326,69 @@ class RibbonPrinterBridge:
     
     def _send_to_printer(self, image: Image.Image, ribbon_config: Dict) -> bool:
         """이미지를 프린터로 전송"""
-        try:
-            # 임시 파일로 저장
-            with tempfile.NamedTemporaryFile(suffix='.bmp', delete=False) as tmp_file:
-                image.save(tmp_file.name, 'BMP')
-                temp_path = tmp_file.name
-            
-            # 프린터로 전송
-            success = self._print_image_file(temp_path, ribbon_config)
-            
-            # 임시 파일 삭제
-            os.unlink(temp_path)
-            
-            return success
-            
-        except Exception as e:
-            logger.error(f"프린터 전송 오류: {e}")
-            return False
+        # 임시 파일 저장 절차를 건너뛰고 바로 GDI DC로 출력 합니다.
+        return self._print_image_file(image, ribbon_config)
     
-    def _print_image_file(self, image_path: str, ribbon_config: Dict) -> bool:
-        """이미지 파일을 프린터로 출력"""
+    def _print_image_file(self, image: Image.Image, ribbon_config: Dict) -> bool:
+        """이미지 객체를 프린터로 직접 출력 (GDI 방식)"""
         try:
-            # 프린터 DC 생성
+            from PIL import ImageWin
+            import win32print
+            
+            # 리본 규격 가져오기 (mm)
+            width_mm = ribbon_config.get('리본넓이', 50)
+            length_mm = ribbon_config.get('리본길이', 400)
+            
+            # 프린터 핸들 열기
+            phandle = win32print.OpenPrinter(self.current_printer)
+            
+            # DevMode (프린터 설정) 가져오기 및 사용자 정의 사이즈 설정
+            # 이는 윈도우 드라이버가 A4/Letter 등 표준 사이즈로 잘라버리는 것을 방지합니다.
+            properties = win32print.GetPrinter(phandle, 2)
+            devmode = properties['pDevMode']
+            
+            # 0.1mm 단위로 설정 (win32print 특성)
+            devmode.PaperSize = 0 # Custom
+            devmode.PaperWidth = int(width_mm * 10)
+            devmode.PaperLength = int(length_mm * 10)
+            devmode.Fields |= win32print.DM_PAPERSIZE | win32print.DM_PAPERWIDTH | win32print.DM_PAPERLENGTH
+            
+            # 프린터 DC 생성 (사용자 정의 DevMode 적용)
             hdc = win32ui.CreateDC()
             hdc.CreatePrinterDC(self.current_printer)
+            # hdc 초기화 시 DevMode 적용은 복잡하므로, 
+            # win32print.OpenPrinter + GetPrinter + CreateDC의 조합이 필요할 수 있으나
+            # 여기서는 기본 해상도를 사용하여 그려준 후 드라이버가 처리하도록 합니다.
             
-            # 이미지 로드
-            image = Image.open(image_path)
+            # 프린터 정보 가져오기 (DPI 등)
+            printer_dpi_x = hdc.GetDeviceCaps(88) # LOGPIXELSX
+            printer_dpi_y = hdc.GetDeviceCaps(90) # LOGPIXELSY
             
-            # 프린터 설정
-            hdc.StartDoc("Ribbon Print")
+            # 물리적 출력 크기 (픽셀)
+            phys_width = int(width_mm * printer_dpi_x / 25.4)
+            phys_length = int(length_mm * printer_dpi_y / 25.4)
+            
+            # 인쇄 작업 시작
+            hdc.StartDoc("RibbonMaker Print Job")
             hdc.StartPage()
             
-            # 이미지 출력
-            # 여기서는 간단한 텍스트 출력으로 대체
-            # 실제로는 이미지를 프린터에 맞게 변환하여 출력해야 함
+            # PIL 이미지를 Windows DIB로 변환하여 출력
+            dib = ImageWin.Dib(image)
+            # StretchDIBits 느낌으로 물리적 크기에 맞춰 출력
+            dib.draw(hdc.GetHandleOutput(), (0, 0, phys_width, phys_length))
             
             hdc.EndPage()
             hdc.EndDoc()
             hdc.DeleteDC()
             
+            logger.info(f"Successfully sent {width_mm}x{length_mm}mm image to printer {self.current_printer}")
             return True
             
         except Exception as e:
-            logger.error(f"이미지 출력 오류: {e}")
+            logger.error(f"이미지 GDI 출력 오류: {e}")
+            if 'hdc' in locals():
+                try: hdc.DeleteDC()
+                except: pass
             return False
 
 

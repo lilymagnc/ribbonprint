@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { toPng } from 'html-to-image';
 import { 
   Printer, 
   Settings, 
@@ -11,7 +12,8 @@ import {
   ChevronDown,
   Search,
   Check,
-  Wrench
+  Wrench,
+  Eye
 } from 'lucide-react';
 import { FontManagerDialog } from './FontManagerDialog';
 import { type CustomFontInfo, getAllCustomFonts, getHiddenFonts } from './lib/font-store';
@@ -339,11 +341,14 @@ interface RibbonCanvasProps {
   zoom: number;      // current zoom level to compensate UI scale
   spacing: number;   // manual gap percentage (0 = auto/spread)
   side?: 'left' | 'right'; 
+  isActive?: boolean;
+  onClick?: () => void;
+  isPrintMode?: boolean;
 }
 
 const RibbonCanvas = ({ 
   text, fontConfig, ratioX, ratioY, width, lace, length, marginTop, marginBottom, 
-  rotatedIds, onCharClick, scaleRatio, zoom, spacing, side = 'left'
+  rotatedIds, onCharClick, scaleRatio, zoom, spacing, side = 'left', isActive, onClick, isPrintMode = false
 }: RibbonCanvasProps) => {
   // Parse lines
   const lines = text.split('\n').filter(l => l.trim() !== '');
@@ -361,79 +366,88 @@ const RibbonCanvas = ({
 
   return (
     <div 
-      className="relative flex justify-center"
+      onClick={onClick}
+      className={cn(
+        "relative flex justify-center transition-all duration-300",
+        isActive ? "ring-4 ring-blue-500 shadow-[0_0_30px_rgba(59,130,246,0.3)] z-10" : "hover:scale-[1.01] cursor-pointer"
+      )}
       style={{
         width: `${width * scaleRatio}px`,
         height: `${length * scaleRatio}px`,
+        backgroundColor: 'white'
       }}
     >
       {/* Visual Ruler Outside the Ribbon */}
-      <div 
-        className={cn(
-          "absolute top-0 bottom-0 flex flex-col justify-between font-mono py-1 z-10 pointer-events-none",
-          side === 'left' ? "items-end pr-2" : "items-start pl-2"
-        )}
-        style={{
-          width: `${60 / zoom}px`,
-          [side === 'left' ? 'right' : 'left']: '100%',
-          [side === 'left' ? 'marginRight' : 'marginLeft']: `${20 / zoom}px`
-        }}
-      >
-        <span style={{ transform: `scale(${1/zoom})`, transformOrigin: side === 'left' ? 'right top' : 'left top', fontSize: '14px', color: '#94a3b8', fontWeight: 'bold' }}>0</span>
-        <div style={{ width: `${1/zoom}px` }} className={cn("h-full bg-gray-500/50 absolute top-0 bottom-0", side === 'left' ? "right-0" : "left-0")}></div>
-        <span style={{ transform: `scale(${1/zoom})`, transformOrigin: side === 'left' ? 'right bottom' : 'left bottom', fontSize: '14px', color: '#94a3b8', fontWeight: 'bold' }}>{length}</span>
-      </div>
+      {!isPrintMode && (
+        <>
+          <div 
+            className={cn(
+              "absolute top-0 bottom-0 flex flex-col justify-between font-mono py-1 z-10 pointer-events-none",
+              side === 'left' ? "items-end pr-2" : "items-start pl-2"
+            )}
+            style={{
+              width: `${60 / zoom}px`,
+              [side === 'left' ? 'right' : 'left']: '100%',
+              [side === 'left' ? 'marginRight' : 'marginLeft']: `${20 / zoom}px`
+            }}
+          >
+            <span style={{ transform: `scale(${1/zoom})`, transformOrigin: side === 'left' ? 'right top' : 'left top', fontSize: '14px', color: '#94a3b8', fontWeight: 'bold' }}>0</span>
+            <div style={{ width: `${1/zoom}px` }} className={cn("h-full bg-gray-500/50 absolute top-0 bottom-0", side === 'left' ? "right-0" : "left-0")}></div>
+            <span style={{ transform: `scale(${1/zoom})`, transformOrigin: side === 'left' ? 'right bottom' : 'left bottom', fontSize: '14px', color: '#94a3b8', fontWeight: 'bold' }}>{length}</span>
+          </div>
 
-      {/* Margins Indicators Outside the Ribbon */}
-      <div 
-        className={cn("absolute border-red-500/70 z-20 pointer-events-none", side === 'left' ? "right-full" : "left-full")}
-        style={{ 
-          top: `${marginTop * scaleRatio}px`,
-          borderTopWidth: `${1/zoom}px`,
-          borderTopStyle: 'dashed',
-          width: `${120 / zoom}px`, // Constant line length on screen
-          [side === 'left' ? 'marginRight' : 'marginLeft']: '0px'
-        }}
-      >
-        <span 
-          className={cn("absolute text-[14px] text-red-500 font-black bg-[#0f172a] px-1 whitespace-nowrap", side === 'left' ? "left-0" : "right-0")}
-          style={{ 
-            transform: `scale(${1/zoom})`, 
-            transformOrigin: side === 'left' ? 'left bottom' : 'right bottom',
-            bottom: `${0.3/zoom}rem`
-          }}
-        >
-          상단여백 {marginTop}
-        </span>
-      </div>
+          {/* Margins Indicators Outside the Ribbon */}
+          <div 
+            className={cn("absolute border-red-500/70 z-20 pointer-events-none", side === 'left' ? "right-full" : "left-full")}
+            style={{ 
+              top: `${marginTop * scaleRatio}px`,
+              borderTopWidth: `${1/zoom}px`,
+              borderTopStyle: 'dashed',
+              width: `${120 / zoom}px`, // Constant line length on screen
+              [side === 'left' ? 'marginRight' : 'marginLeft']: '0px'
+            }}
+          >
+            <span 
+              className={cn("absolute text-[14px] text-red-500 font-black bg-[#0f172a] px-1 whitespace-nowrap", side === 'left' ? "left-0" : "right-0")}
+              style={{ 
+                transform: `scale(${1/zoom})`, 
+                transformOrigin: side === 'left' ? 'left bottom' : 'right bottom',
+                bottom: `${0.3/zoom}rem`
+              }}
+            >
+              상단여백 {marginTop}
+            </span>
+          </div>
 
-      <div 
-        className={cn("absolute border-red-500/70 z-20 pointer-events-none", side === 'left' ? "right-full" : "left-full")}
-        style={{ 
-          bottom: `${marginBottom * scaleRatio}px`,
-          borderBottomWidth: `${1/zoom}px`,
-          borderBottomStyle: 'dashed',
-          width: `${120 / zoom}px`, // Constant line length on screen
-          [side === 'left' ? 'marginRight' : 'marginLeft']: '0px'
-        }}
-      >
-        <span 
-          className={cn("absolute text-[14px] text-red-500 font-black bg-[#0f172a] px-1 whitespace-nowrap", side === 'left' ? "left-0" : "right-0")}
-          style={{ 
-            transform: `scale(${1/zoom})`, 
-            transformOrigin: side === 'left' ? 'left top' : 'right top',
-            top: `${0.3/zoom}rem`
-          }}
-        >
-          하단여백 {marginBottom}
-        </span>
-      </div>
+          <div 
+            className={cn("absolute border-red-500/70 z-20 pointer-events-none", side === 'left' ? "right-full" : "left-full")}
+            style={{ 
+              bottom: `${marginBottom * scaleRatio}px`,
+              borderBottomWidth: `${1/zoom}px`,
+              borderBottomStyle: 'dashed',
+              width: `${120 / zoom}px`, // Constant line length on screen
+              [side === 'left' ? 'marginRight' : 'marginLeft']: '0px'
+            }}
+          >
+            <span 
+              className={cn("absolute text-[14px] text-red-500 font-black bg-[#0f172a] px-1 whitespace-nowrap", side === 'left' ? "left-0" : "right-0")}
+              style={{ 
+                transform: `scale(${1/zoom})`, 
+                transformOrigin: side === 'left' ? 'left top' : 'right top',
+                top: `${0.3/zoom}rem`
+              }}
+            >
+              하단여백 {marginBottom}
+            </span>
+          </div>
+        </>
+      )}
 
       {/* Ribbon Body */}
-      <div className="bg-white ribbon-texture shadow-2xl relative overflow-hidden flex flex-col items-center" style={{ width: '100%', height: '100%' }}>
+      <div className={cn("relative overflow-hidden flex flex-col items-center", !isPrintMode ? "bg-white ribbon-texture shadow-2xl" : "bg-white")} style={{ width: '100%', height: '100%' }}>
         
         {/* Lace Effects */}
-        {lace > 0 && (
+        {!isPrintMode && lace > 0 && (
           <>
             <div className="absolute left-0 top-0 bottom-0 border-r border-[#00000010] flex flex-col overflow-hidden" style={{ width: `${lace * scaleRatio}px` }}>
                <div className="flex-1 w-full bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-amber-200/20 to-transparent" style={{ backgroundSize: '4px 4px' }} />
@@ -707,6 +721,21 @@ const RibbonCanvas = ({
 // ==========================================
 export default function App() {
   const mainRef = useRef<HTMLElement>(null);
+  const printAreaRef = useRef<HTMLDivElement>(null);
+
+  // Printer State
+  const [printers, setPrinters] = useState<any[]>([]);
+  const [selectedPrinter, setSelectedPrinter] = useState('');
+  const [isPrinting, setIsPrinting] = useState(false);
+
+  // User Print Settings
+  const [printTarget, setPrintTarget] = useState<'both' | 'left' | 'right'>('both');
+  const [printLayout, setPrintLayout] = useState<'connected' | 'separate'>('connected');
+  const [mediaType, setMediaType] = useState<'roll' | 'cut'>('roll');
+
+  const connectedPrintRef = useRef<HTMLDivElement>(null);
+  const separateLeftRef = useRef<HTMLDivElement>(null);
+  const separateRightRef = useRef<HTMLDivElement>(null);
 
   // Specs State
   const [ribbonType, setRibbonType] = useState(RIBBON_TYPES[0].id);
@@ -746,6 +775,7 @@ export default function App() {
   // UI State
   const [activeSide, setActiveSide] = useState<'left'|'right'>('left');
   const [zoom, setZoom] = useState(0.4);
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [phraseCategory, setPhraseCategory] = useState(0);
   const [fontWizardMode, setFontWizardMode] = useState<keyof FontConfig>('ko');
   const [fontWizardModeRight, setFontWizardModeRight] = useState<keyof FontConfig>('ko');
@@ -796,7 +826,79 @@ export default function App() {
 
   useEffect(() => {
     loadFontSettings();
+    // Load Printers
+    fetch('http://localhost:8000/api/printers')
+      .then(res => res.json())
+      .then(res => {
+        if (res.status === 'success' && Array.isArray(res.data)) {
+          setPrinters(res.data);
+          if (res.data.length > 0) setSelectedPrinter(res.data[0].name);
+        }
+      })
+      .catch(err => console.error("Failed to fetch printers", err));
   }, []);
+
+  const handlePrint = async () => {
+    if (!selectedPrinter) {
+       alert("연결된 프린터를 선택해주세요.");
+       return;
+    }
+
+    try {
+      setIsPrinting(true);
+      
+      const sendJob = async (ref: React.RefObject<HTMLDivElement | null>, w: number, h: number, label: string) => {
+        if (!ref.current) return;
+        
+        const dataUrl = await toPng(ref.current, {
+          pixelRatio: 3, 
+          backgroundColor: '#ffffff',
+        });
+
+        const response = await fetch('http://localhost:8000/api/print_image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            printer_name: selectedPrinter,
+            image_base64: dataUrl,
+            width_mm: w,
+            length_mm: h,
+            media_type: mediaType
+          }),
+        });
+
+        const result = await response.json();
+        if (result.status !== 'success') {
+          throw new Error(`${label} 인쇄 실패: ${result.message}`);
+        }
+      };
+
+      if (printTarget === 'left') {
+        await sendJob(separateLeftRef, width, length, "경조사");
+        alert("경조사 인쇄 작업이 전송되었습니다.");
+      } else if (printTarget === 'right') {
+        await sendJob(separateRightRef, width, length, "보내는이");
+        alert("보내는이 인쇄 작업이 전송되었습니다.");
+      } else {
+        // 양쪽 모두
+        if (printLayout === 'connected') {
+          await sendJob(connectedPrintRef, width, length * 2, "양쪽 연결");
+          alert("양쪽 연결 인쇄 작업이 전송되었습니다.");
+        } else {
+          await sendJob(separateLeftRef, width, length, "경조사");
+          await new Promise(r => setTimeout(r, 1000));
+          await sendJob(separateRightRef, width, length, "보내는이");
+          alert("각각 인쇄 작업(총 2건)이 전송되었습니다.");
+        }
+      }
+
+    } catch (error: any) {
+       console.error("Print error:", error);
+       alert("인쇄 중 오류가 발생했습니다: " + error.message);
+    } finally {
+       setIsPrinting(false);
+    }
+  };
 
   const extendedFonts = useMemo(() => {
     const custom: FontItem[] = customFontItems.map(f => ({
@@ -906,6 +1008,84 @@ export default function App() {
             <div>
               <label className="text-xs text-slate-400 block mb-1">길이 (mm)</label>
               <input type="number" value={length} onChange={e => setLength(Number(e.target.value))} className="w-full p-2 rounded-lg text-sm text-center font-mono" />
+            </div>
+          </div>
+          
+          <div>
+            <label className="text-xs text-slate-400 block mb-1">인쇄 대상 / 용지</label>
+            <div className="flex flex-col gap-2">
+              <div className="grid grid-cols-3 gap-2">
+                 <button 
+                  onClick={() => setPrintTarget('both')}
+                  className={cn("p-2 rounded-lg text-xs transition", printTarget === 'both' ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-400 hover:bg-slate-700")}
+                 >양쪽 모두</button>
+                 <button 
+                  onClick={() => setPrintTarget('left')}
+                  className={cn("p-2 rounded-lg text-xs transition", printTarget === 'left' ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-400 hover:bg-slate-700")}
+                 >경조사</button>
+                 <button 
+                  onClick={() => setPrintTarget('right')}
+                  className={cn("p-2 rounded-lg text-xs transition", printTarget === 'right' ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-400 hover:bg-slate-700")}
+                 >보내는이</button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                 {printTarget === 'both' ? (
+                   <select 
+                     value={printLayout} 
+                     onChange={e => setPrintLayout(e.target.value as any)}
+                     className="p-2 rounded-lg text-xs bg-slate-800 border-slate-700 text-white focus:ring-1"
+                   >
+                     <option value="connected">양쪽 연결 인쇄</option>
+                     <option value="separate">각각 인쇄</option>
+                   </select>
+                 ) : (
+                   <div className="p-2 rounded-lg text-xs bg-slate-900/50 text-slate-500 flex items-center justify-center italic">단면 인쇄 모드</div>
+                 )}
+                 <select 
+                   value={mediaType} 
+                   onChange={e => setMediaType(e.target.value as any)}
+                   className="p-2 rounded-lg text-xs bg-slate-800 border-slate-700 text-white outline-none focus:ring-1"
+                 >
+                   <option value="roll">롤 리본</option>
+                   <option value="cut">낱장 리본</option>
+                 </select>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs text-slate-400">출력 프린터</label>
+              <div className="flex items-center gap-1.5">
+                <div className={cn("w-2 h-2 rounded-full animate-pulse", printers.length > 0 ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" : "bg-red-500")} />
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Live Agent</span>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <select 
+                value={selectedPrinter} 
+                onChange={e => setSelectedPrinter(e.target.value)}
+                className="flex-1 p-2 rounded-lg text-sm bg-slate-800 border-slate-700 text-white outline-none focus:ring-2"
+              >
+                {printers.length === 0 && <option value="">감지된 프린터 없음</option>}
+                {printers.map(p => (
+                  <option key={p.name} value={p.name}>
+                    {p.name} {p.status === 'Ready' ? '✅' : '⚠️'}
+                  </option>
+                ))}
+              </select>
+              <button 
+                onClick={() => {
+                  fetch('http://localhost:8000/api/printers')
+                    .then(res => res.json())
+                    .then(res => res.status === 'success' && setPrinters(res.data));
+                }}
+                title="목록 갱신"
+                className="p-2 bg-slate-800 border border-slate-700 rounded-lg hover:bg-slate-700 transition"
+              >
+                <RotateCw size={14} className={isPrinting ? "animate-spin" : ""} />
+              </button>
             </div>
           </div>
           <div className="grid grid-cols-3 gap-3">
@@ -1121,32 +1301,149 @@ export default function App() {
       </aside>
 
       {/* 2. Center Panel: Canvas */}
-      <main ref={mainRef} className="flex-1 relative flex justify-center items-start overflow-auto p-12 bg-[#0f172a]">
+      <main ref={mainRef} className="flex-1 relative overflow-auto p-12 bg-[#0f172a] min-w-0">
         
-        {/* Canvas Area */}
-        <div className="flex gap-24 transition-transform duration-300" style={{ transform: `scale(${zoom})`, transformOrigin: 'top center' }}>
-          <RibbonCanvas 
-            text={leftText} fontConfig={leftFontConfig} ratioX={leftRatioX} ratioY={leftRatioY} lace={lace}
-            width={width} length={length} marginTop={marginTop} marginBottom={marginBottom}
-            rotatedIds={leftRotated} onCharClick={(id) => toggleRotation(id, 'left')}
-            scaleRatio={2} zoom={zoom} spacing={leftSpacing} side="left"
-          />
-          <RibbonCanvas 
-            text={rightText} fontConfig={rightFontConfig} ratioX={rightRatioX} ratioY={rightRatioY} lace={lace}
-            width={width} length={length} marginTop={marginTop} marginBottom={marginBottom}
-            rotatedIds={rightRotated} onCharClick={(id) => toggleRotation(id, 'right')}
-            scaleRatio={2} zoom={zoom} spacing={rightSpacing} side="right"
-          />
+        {/* Design Canvas Area */}
+        <div 
+          className={cn(
+            "flex transition-all duration-300 transform-gpu mx-auto w-max origin-top",
+            isPreviewMode ? "gap-4 flex-col items-center" : "gap-24"
+          )} 
+          style={{ 
+            transform: `scale(${zoom})`, 
+            transformOrigin: 'top center',
+            backgroundColor: isPreviewMode ? '#1e293b' : 'transparent',
+            padding: isPreviewMode ? '20px' : '0',
+            borderRadius: isPreviewMode ? '20px' : '0',
+            border: isPreviewMode ? '1px dashed #475569' : 'none'
+          }}
+        >
+          {isPreviewMode ? (
+            // ================= PREVIEW MODE =================
+            <div className="flex flex-col items-center">
+              <div className="text-blue-400 font-bold mb-8 text-2xl uppercase tracking-widest border-b border-blue-400/30 pb-2">
+                Print Preview ({printTarget === 'both' ? (printLayout === 'connected' ? 'Connected' : 'Separate Both') : printTarget})
+              </div>
+              
+              <div className="flex flex-col items-center bg-white shadow-2xl p-4 border-[10px] border-slate-700 rounded-sm">
+                {printTarget === 'left' && (
+                  <div style={{ transform: 'rotate(180deg)', transformOrigin: 'center center' }}>
+                    <RibbonCanvas 
+                      text={leftText} fontConfig={leftFontConfig} ratioX={leftRatioX} ratioY={leftRatioY} lace={lace}
+                      width={width} length={length} marginTop={marginTop} marginBottom={marginBottom}
+                      rotatedIds={leftRotated} onCharClick={() => {}}
+                      scaleRatio={2} zoom={1} spacing={leftSpacing} side="left"
+                    />
+                  </div>
+                )}
+                {printTarget === 'right' && (
+                  <div style={{ transform: 'rotate(180deg)', transformOrigin: 'center center' }}>
+                    <RibbonCanvas 
+                      text={rightText} fontConfig={rightFontConfig} ratioX={rightRatioX} ratioY={rightRatioY} lace={lace}
+                      width={width} length={length} marginTop={marginTop} marginBottom={marginBottom}
+                      rotatedIds={rightRotated} onCharClick={() => {}}
+                      scaleRatio={2} zoom={1} spacing={rightSpacing} side="right"
+                    />
+                  </div>
+                )}
+                {printTarget === 'both' && printLayout === 'connected' && (
+                  <div className="flex flex-col items-center">
+                    <div style={{ transform: 'rotate(180deg)', transformOrigin: 'center center' }}>
+                      <RibbonCanvas 
+                        text={leftText} fontConfig={leftFontConfig} ratioX={leftRatioX} ratioY={leftRatioY} lace={lace}
+                        width={width} length={length} marginTop={marginTop} marginBottom={marginBottom}
+                        rotatedIds={leftRotated} onCharClick={() => {}}
+                        scaleRatio={2} zoom={1} spacing={leftSpacing} side="left"
+                      />
+                    </div>
+                    {/* Middle Connection Line */}
+                    <div style={{ width: `${(width - lace*2) * 2}px`, height: '4px', backgroundColor: 'black' }} />
+                    <RibbonCanvas 
+                      text={rightText} fontConfig={rightFontConfig} ratioX={rightRatioX} ratioY={rightRatioY} lace={lace}
+                      width={width} length={length} marginTop={marginTop} marginBottom={marginBottom}
+                      rotatedIds={rightRotated} onCharClick={() => {}}
+                      scaleRatio={2} zoom={1} spacing={rightSpacing} side="right"
+                    />
+                  </div>
+                )}
+                {printTarget === 'both' && printLayout === 'separate' && (
+                  <div className="flex gap-12">
+                    <div style={{ transform: 'rotate(180deg)', transformOrigin: 'center center' }}>
+                      <RibbonCanvas 
+                        text={leftText} fontConfig={leftFontConfig} ratioX={leftRatioX} ratioY={leftRatioY} lace={lace}
+                        width={width} length={length} marginTop={marginTop} marginBottom={marginBottom}
+                        rotatedIds={leftRotated} onCharClick={() => {}}
+                        scaleRatio={2} zoom={1} spacing={leftSpacing} side="left"
+                      />
+                    </div>
+                    <div style={{ transform: 'rotate(180deg)', transformOrigin: 'center center' }}>
+                      <RibbonCanvas 
+                        text={rightText} fontConfig={rightFontConfig} ratioX={rightRatioX} ratioY={rightRatioY} lace={lace}
+                        width={width} length={length} marginTop={marginTop} marginBottom={marginBottom}
+                        rotatedIds={rightRotated} onCharClick={() => {}}
+                        scaleRatio={2} zoom={1} spacing={rightSpacing} side="right"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            // ================= DESIGN MODE =================
+            <div 
+              ref={printAreaRef}
+              className="flex gap-24 transition-transform duration-300 bg-[#0f172a]" 
+              style={{ transformOrigin: 'top center' }}
+            >
+              <RibbonCanvas 
+                text={leftText} fontConfig={leftFontConfig} ratioX={leftRatioX} ratioY={leftRatioY} lace={lace}
+                width={width} length={length} marginTop={marginTop} marginBottom={marginBottom}
+                rotatedIds={leftRotated} onCharClick={(id) => toggleRotation(id, 'left')}
+                scaleRatio={2} zoom={zoom} spacing={leftSpacing} isActive={activeSide === 'left'}
+                onClick={() => setActiveSide('left')} side="left"
+              />
+              <RibbonCanvas 
+                text={rightText} fontConfig={rightFontConfig} ratioX={rightRatioX} ratioY={rightRatioY} lace={lace}
+                width={width} length={length} marginTop={marginTop} marginBottom={marginBottom}
+                rotatedIds={rightRotated} onCharClick={(id) => toggleRotation(id, 'right')}
+                scaleRatio={2} zoom={zoom} spacing={rightSpacing} isActive={activeSide === 'right'}
+                onClick={() => setActiveSide('right')} side="right"
+              />
+            </div>
+          )}
         </div>
 
         {/* Floating Actions */}
         <div className="fixed bottom-8 right-[320px] bg-slate-800/80 backdrop-blur-md p-2 rounded-full border border-slate-600 flex gap-2 shadow-2xl z-20">
+          <button 
+            onClick={() => setIsPreviewMode(!isPreviewMode)} 
+            className={cn(
+              "p-2 rounded-full transition-colors flex items-center gap-2 px-4 whitespace-nowrap", 
+              isPreviewMode ? "bg-blue-600 text-white" : "hover:bg-slate-700 text-slate-300"
+            )}
+          >
+            {isPreviewMode ? <Maximize2 size={18} /> : <Eye size={18} />}
+            <span className="text-xs font-bold uppercase">{isPreviewMode ? "Design" : "Preview"}</span>
+          </button>
+          <div className="w-px h-6 bg-slate-600 my-auto"></div>
           <button onClick={() => setZoom(z => Math.max(0.1, z - 0.1))} className="p-2 hover:bg-slate-700 rounded-full transition-colors"><Minimize2 size={18} /></button>
-          <div className="px-3 flex items-center justify-center font-mono text-xs">{Math.round(zoom * 100)}%</div>
+          <div className="px-3 flex items-center justify-center font-mono text-xs text-white">{Math.round(zoom * 100)}%</div>
           <button onClick={() => setZoom(z => Math.min(2.0, z + 0.1))} className="p-2 hover:bg-slate-700 rounded-full transition-colors"><Maximize2 size={18} /></button>
           <div className="w-px h-6 bg-slate-600 my-auto mx-1"></div>
-          <button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-full font-bold transition-all shadow-lg">
-            <Printer size={16} /> PRINT
+          <button 
+            disabled={isPrinting}
+            onClick={handlePrint}
+            className={cn(
+              "flex items-center gap-2 px-6 py-2 rounded-full font-bold transition-all shadow-lg",
+              isPrinting ? "bg-slate-600 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-500 text-white"
+            )}
+          >
+            {isPrinting ? (
+              <RotateCw className="w-4 h-4 animate-spin text-white" />
+            ) : (
+              <Printer size={16} />
+            )}
+            {isPrinting ? "SENDING..." : "PRINT"}
           </button>
         </div>
       </main>
@@ -1225,6 +1522,58 @@ export default function App() {
         baseFonts={FONTS}
         onSettingsChanged={loadFontSettings}
       />
+
+      {/* Hidden Professional Capture Areas (Not visible to user) */}
+      <div style={{ position: 'fixed', left: -5000, top: -5000, pointerEvents: 'none' }}>
+        
+        {/* 1. Connected Strip Mode [L (180 deg) + Line + R] */}
+        <div 
+          ref={connectedPrintRef} 
+          style={{ 
+            display: 'flex', 
+            flexDirection: 'column', 
+            alignItems: 'center', 
+            backgroundColor: 'white',
+            width: `${width * 2}px` // wide enough to avoid clipping during rotation
+          }}
+        >
+          <div style={{ transform: 'rotate(180deg)', transformOrigin: 'center center' }}>
+            <RibbonCanvas 
+              text={leftText} fontConfig={leftFontConfig} ratioX={leftRatioX} ratioY={leftRatioY} lace={lace}
+              width={width} length={length} marginTop={marginTop} marginBottom={marginBottom}
+              rotatedIds={leftRotated} onCharClick={() => {}}
+              scaleRatio={2} zoom={1} spacing={leftSpacing} side="left" isPrintMode={true}
+            />
+          </div>
+          {/* Middle Connection Line */}
+          <div style={{ width: `${(width - lace*2) * 2}px`, height: '4px', backgroundColor: 'black' }} />
+          <RibbonCanvas 
+            text={rightText} fontConfig={rightFontConfig} ratioX={rightRatioX} ratioY={rightRatioY} lace={lace}
+            width={width} length={length} marginTop={marginTop} marginBottom={marginBottom}
+            rotatedIds={rightRotated} onCharClick={() => {}}
+            scaleRatio={2} zoom={1} spacing={rightSpacing} side="right" isPrintMode={true}
+          />
+        </div>
+
+        {/* 2. Separate Mode (Both rotated 180 as per user drawing) */}
+        <div ref={separateLeftRef} style={{ backgroundColor: 'white', transform: 'rotate(180deg)' }}>
+          <RibbonCanvas 
+            text={leftText} fontConfig={leftFontConfig} ratioX={leftRatioX} ratioY={leftRatioY} lace={lace}
+            width={width} length={length} marginTop={marginTop} marginBottom={marginBottom}
+            rotatedIds={leftRotated} onCharClick={() => {}}
+            scaleRatio={2} zoom={1} spacing={leftSpacing} side="left" isPrintMode={true}
+          />
+        </div>
+        <div ref={separateRightRef} style={{ backgroundColor: 'white', transform: 'rotate(180deg)' }}>
+          <RibbonCanvas 
+            text={rightText} fontConfig={rightFontConfig} ratioX={rightRatioX} ratioY={rightRatioY} lace={lace}
+            width={width} length={length} marginTop={marginTop} marginBottom={marginBottom}
+            rotatedIds={rightRotated} onCharClick={() => {}}
+            scaleRatio={2} zoom={1} spacing={rightSpacing} side="right" isPrintMode={true}
+          />
+        </div>
+
+      </div>
     </div>
   );
 }
